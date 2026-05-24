@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import fastifyCors from '@fastify/cors';
 import fastifyHelmet from '@fastify/helmet';
+import fastifyMultipart from '@fastify/multipart';
 import fastifyRateLimit from '@fastify/rate-limit';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import { config } from './shared/config.js';
@@ -10,6 +11,7 @@ import { authenticate } from './middleware/auth.js';
 import { requireTenant } from './middleware/tenant.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { authRoutes } from './features/auth/routes.js';
+import { remitoRoutes } from './features/remitos/routes.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -24,12 +26,14 @@ export async function buildApp() {
   await app.register(fastifyCors, { origin: true });
   await app.register(fastifyHelmet);
   await app.register(fastifyRateLimit, { max: 100, timeWindow: '1 minute' });
+  await app.register(fastifyMultipart, { limits: { fileSize: 10 * 1024 * 1024 } });
 
   app.decorate('authenticate', authenticate);
   app.decorate('requireTenant', requireTenant);
   app.setErrorHandler(errorHandler);
 
   await app.register(authRoutes, { prefix: '/api/auth' });
+  await app.register(remitoRoutes, { prefix: '/api/remitos' });
 
   return app;
 }

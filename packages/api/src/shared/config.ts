@@ -6,6 +6,13 @@ const envSchema = z.object({
   REDIS_URL: z.string().min(1),
   JWT_SECRET: z.string().min(32),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  GEMINI_API_KEY: z.string().min(1),
+  STORAGE_ENDPOINT: z.string().url(),
+  STORAGE_BUCKET: z.string().min(1),
+  STORAGE_ACCESS_KEY: z.string().min(1),
+  STORAGE_SECRET_KEY: z.string().min(1),
+  STORAGE_REGION: z.string().default('us-east-1'),
+  STORAGE_PUBLIC_URL: z.string().url(),
 });
 
 const parsed = envSchema.safeParse(process.env);

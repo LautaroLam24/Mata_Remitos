@@ -1,0 +1,274 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANT — Empresa cliente. Unidad de aislamiento principal.
+// ─────────────────────────────────────────────────────────────────────────────
+model Tenant {
+  id        String    @id @default(cuid())
+  slug      String    @unique
+  name      String
+  // plan: starter | pro | enterprise
+  plan      String    @default("starter")
+  // config: autoProcessThreshold, fuzzyMatchThreshold, lowStockDaysAlert,
+  //         dailyReportTime, dailyReportTimezone, whatsappRecipients
+  config    Json      @default("{}")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  users          User[]
+  suppliers      Supplier[]
+  products       Product[]
+  documents      Document[]
+  stockMovements StockMovement[]
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+
+  @@map("tenants")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USER — Usuario del sistema. Pertenece a un único tenant.
+// ─────────────────────────────────────────────────────────────────────────────
+model User {
+  id           String    @id @default(cuid())
+  tenantId     String
+  email        String
+  name         String
+  passwordHash String
+  // role: owner | admin | user
+  role         String    @default("user")
+  phone        String? // para WhatsApp
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  uploadedDocuments Document[]      @relation("UploadedBy")
+  approvedDocuments Document[]      @relation("ApprovedBy")
+  stockMovements    StockMovement[]
+  auditLogs         AuditLog[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUPPLIER — Proveedor. CUIT validado en capa de aplicación.
+// ─────────────────────────────────────────────────────────────────────────────
+model Supplier {
+  id        String    @id @default(cuid())
+  tenantId  String
+  cuit      String
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  documents Document[]
+
+  @@unique([tenantId, cuit])
+  @@index([tenantId])
+  @@index([tenantId, name])
+  @@map("suppliers")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRODUCT — Catálogo de productos por tenant.
+// ─────────────────────────────────────────────────────────────────────────────
+model Product {
+  id          String    @id @default(cuid())
+  tenantId    String
+  code        String
+  name        String
+  // unit: un | kg | lt | etc.
+  unit        String
+  stockOnHand Decimal   @default(0) @db.Decimal(12, 3)
+  minStock    Decimal?  @db.Decimal(12, 3)
+  aliases     String[] // nombres alternativos para fuzzy match
+  // typicalRange: { min: number, max: number } para alertas de cantidad
+  typicalRange Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  documentItems  DocumentItem[]
+  stockMovements StockMovement[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, name])
+  @@map("products")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCUMENT — Remito o factura procesado por la IA.
+// ─────────────────────────────────────────────────────────────────────────────
+model Document {
+  id               String    @id @default(cuid())
+  tenantId         String
+  supplierId       String
+  // supplierCuit denormalizado para el constraint único sin join
+  supplierCuit     String
+  // type: remito | factura_a | factura_b | factura_c | nota_pedido
+  type             String
+  documentNumber   String
+  date             DateTime  @db.Date
+  // status: processing | review_needed | approved | rejected
+  status           String    @default("processing")
+  overallConfidence Int // 0-100, confianza global de extracción IA
+  rawExtraction    Json // datos crudos devueltos por la IA
+  warnings         String[] // warnings del procesamiento
+  imageUrl         String // URL en Cloudflare R2
+  imageThumbnailUrl String?
+  uploadedById     String
+  approvedById     String?
+  approvedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  supplier   Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  uploadedBy User           @relation("UploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  approvedBy User?          @relation("ApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  items      DocumentItem[]
+
+  // Constraint anti-duplicado según R-002
+  @@unique([tenantId, documentNumber, supplierCuit, date])
+  @@index([tenantId, status])
+  @@index([tenantId, date])
+  @@index([tenantId, supplierId])
+  @@map("documents")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCUMENT ITEM — Línea de producto dentro de un documento.
+// Cascade delete desde Document (relación jerárquica).
+// ─────────────────────────────────────────────────────────────────────────────
+model DocumentItem {
+  id             String    @id @default(cuid())
+  tenantId       String // denormalizado para performance en índices
+  documentId     String
+  productId      String? // null si aún no matcheado
+  rawDescription String // texto crudo de la extracción IA
+  quantity       Decimal   @db.Decimal(12, 3)
+  unit           String
+  unitPrice      Decimal?  @db.Decimal(12, 2)
+  confidenceScore Int? // confianza del campo quantity (0-100)
+  matchScore     Int? // score 0-100 del fuzzy match contra catálogo
+  // matchStatus: pending | matched | new_product | rejected
+  matchStatus    String    @default("pending")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  document Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  product  Product?  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([documentId])
+  @@index([tenantId])
+  @@index([tenantId, matchStatus])
+  @@map("document_items")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STOCK MOVEMENT — Ledger inmutable de movimientos de stock.
+// Sin updatedAt ni deletedAt: estos registros no se modifican.
+// ─────────────────────────────────────────────────────────────────────────────
+model StockMovement {
+  id            String   @id @default(cuid())
+  tenantId      String
+  productId     String
+  userId        String
+  // type: in | out | adjustment
+  type          String
+  // reason: document | sale | manual_adjustment
+  reason        String
+  reference     String? // documentId cuando reason=document
+  quantity      Decimal  @db.Decimal(12, 3)
+  balanceBefore Decimal  @db.Decimal(12, 3)
+  balanceAfter  Decimal  @db.Decimal(12, 3)
+  createdAt     DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, productId, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([productId])
+  @@index([userId])
+  @@map("stock_movements")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDIT LOG — Registro inmutable de toda mutación del sistema.
+// Sin updatedAt ni deletedAt.
+// ─────────────────────────────────────────────────────────────────────────────
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String
+  userId     String
+  // entityType: Document | Product | Supplier | User | StockMovement | etc.
+  entityType String
+  entityId   String
+  // action: create | update | delete | approve | reject | override
+  action     String
+  // changes: { before: {...}, after: {...} }
+  changes    Json
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, entityType, createdAt])
+  @@index([tenantId, userId])
+  @@index([tenantId, entityId])
+  @@index([userId])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTIFICATION — Registro de notificaciones (WhatsApp / email).
+// correlationId garantiza idempotencia al reencolar.
+// ─────────────────────────────────────────────────────────────────────────────
+model Notification {
+  id            String    @id @default(cuid())
+  tenantId      String
+  correlationId String    @unique
+  // channel: whatsapp | email
+  channel       String
+  template      String
+  to            String
+  params        Json
+  // status: pending | sent | failed
+  status        String    @default("pending")
+  externalId    String? // ID devuelto por el proveedor (360dialog, Twilio)
+  error         String?
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@map("notifications")
+}

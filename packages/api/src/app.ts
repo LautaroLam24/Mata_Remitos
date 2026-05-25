@@ -12,6 +12,9 @@ import { requireTenant } from './middleware/tenant.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { authRoutes } from './features/auth/routes.js';
 import { remitoRoutes } from './features/remitos/routes.js';
+import { productosRoutes } from './features/productos/routes.js';
+import { proveedoresRoutes } from './features/proveedores/routes.js';
+import { stockRoutes } from './features/stock/routes.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -34,6 +37,9 @@ export async function buildApp() {
 
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(remitoRoutes, { prefix: '/api/remitos' });
+  await app.register(productosRoutes, { prefix: '/api/productos' });
+  await app.register(proveedoresRoutes, { prefix: '/api/proveedores' });
+  await app.register(stockRoutes, { prefix: '/api/stock' });
 
   return app;
 }

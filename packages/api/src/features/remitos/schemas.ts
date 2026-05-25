@@ -76,6 +76,41 @@ export const documentDetailResponseSchema = z.object({
   items: z.array(documentItemSchema),
 });
 
+// ─── Document list ────────────────────────────────────────────────────────────
+
+export const documentListQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(20),
+  status: z
+    .enum(['all', 'processing', 'review_needed', 'approved', 'rejected'])
+    .default('all'),
+  supplierId: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  search: z.string().optional(),
+});
+
+export const documentListItemSchema = z.object({
+  id: z.string(),
+  documentNumber: z.string(),
+  type: z.string(),
+  date: z.string(),
+  status: z.string(),
+  overallConfidence: z.number(),
+  itemCount: z.number(),
+  supplierName: z.string(),
+  supplierCuit: z.string(),
+  createdAt: z.string(),
+});
+
+export const documentListResponseSchema = z.object({
+  items: z.array(documentListItemSchema),
+  total: z.number(),
+  page: z.number(),
+  limit: z.number(),
+  totalPages: z.number(),
+});
+
 // ─── Approve / reject ────────────────────────────────────────────────────────
 
 export const rejectBodySchema = z.object({

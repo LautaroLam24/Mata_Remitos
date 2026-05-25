@@ -12,11 +12,79 @@ import {
   documentDetailResponseSchema,
   approveResponseSchema,
   rejectResponseSchema,
+  documentListQuerySchema,
+  documentListResponseSchema,
 } from './schemas.js';
 import { ValidationError } from '../../shared/errors.js';
 
 export const remitoRoutes: FastifyPluginAsync = async (app) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
+
+  // ─── List ────────────────────────────────────────────────────────────────────
+
+  r.get(
+    '/',
+    {
+      schema: {
+        querystring: documentListQuerySchema,
+        response: { 200: documentListResponseSchema },
+      },
+      preHandler: [app.authenticate, app.requireTenant],
+    },
+    async (req) => {
+      const { page, limit, status, supplierId, dateFrom, dateTo, search } = req.query;
+      const skip = (page - 1) * limit;
+
+      const where: import('@prisma/client').Prisma.DocumentWhereInput = {
+        tenantId: req.tenant.id,
+        deletedAt: null,
+        ...(status !== 'all' ? { status } : {}),
+        ...(supplierId ? { supplierId } : {}),
+        ...(search ? { documentNumber: { contains: search, mode: 'insensitive' } } : {}),
+        ...(dateFrom || dateTo
+          ? {
+              date: {
+                ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+                ...(dateTo ? { lte: new Date(dateTo) } : {}),
+              },
+            }
+          : {}),
+      };
+
+      const [docs, total] = await Promise.all([
+        db.document.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            supplier: { select: { name: true, cuit: true } },
+            _count: { select: { items: true } },
+          },
+        }),
+        db.document.count({ where }),
+      ]);
+
+      return {
+        items: docs.map((d) => ({
+          id: d.id,
+          documentNumber: d.documentNumber,
+          type: d.type,
+          date: d.date.toISOString(),
+          status: d.status,
+          overallConfidence: d.overallConfidence,
+          itemCount: d._count.items,
+          supplierName: d.supplier.name,
+          supplierCuit: d.supplier.cuit,
+          createdAt: d.createdAt.toISOString(),
+        })),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
+    },
+  );
 
   // ─── Upload ──────────────────────────────────────────────────────────────────
 

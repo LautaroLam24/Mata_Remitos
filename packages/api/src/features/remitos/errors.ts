@@ -1,5 +1,27 @@
 import { DomainError } from '../../shared/errors.js';
 
+export class DuplicateDocumentError extends DomainError {
+  constructor(params: { documentNumber: string; supplierCuit: string; existingId: string }) {
+    super(
+      `Documento duplicado: ${params.documentNumber} del proveedor ${params.supplierCuit} ya existe`,
+      'DUPLICATE_DOCUMENT',
+      409,
+      params,
+    );
+  }
+}
+
+export class LowConfidenceError extends DomainError {
+  constructor(params: { overallConfidence: number; minCritical: number; threshold: number }) {
+    super(
+      `Confianza insuficiente para auto-procesamiento (overall: ${params.overallConfidence}, mínimo crítico: ${params.minCritical}, umbral: ${params.threshold})`,
+      'LOW_CONFIDENCE',
+      422,
+      params,
+    );
+  }
+}
+
 export class InvalidFileTypeError extends DomainError {
   constructor(mimeType: string) {
     super(

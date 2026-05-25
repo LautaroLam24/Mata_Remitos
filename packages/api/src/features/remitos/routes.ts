@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db } from '../../infrastructure/db.js';
 import { uploadDocument } from './service.js';
 import { getReviewQueue, getDocumentDetail, approveDocument, rejectDocument } from './review-service.js';
+import { getDocumentQueue } from '../../infrastructure/queue.js';
 import {
   uploadResponseSchema,
   reviewQueueQuerySchema,
@@ -36,6 +37,58 @@ export const remitoRoutes: FastifyPluginAsync = async (app) => {
       });
 
       return reply.code(201).send(result);
+    },
+  );
+
+  // ─── Job status ───────────────────────────────────────────────────────────────
+
+  r.get(
+    '/jobs/:jobId',
+    {
+      schema: {
+        params: z.object({ jobId: z.string() }),
+        response: {
+          200: z.object({
+            status: z.enum(['waiting', 'active', 'completed', 'failed', 'unknown']),
+            documentId: z.string().optional(),
+            error: z.string().optional(),
+          }),
+        },
+      },
+      preHandler: [app.authenticate, app.requireTenant],
+    },
+    async (req, reply) => {
+      const { jobId } = req.params;
+      const queue = await getDocumentQueue();
+      const job = await queue.getJob(jobId);
+
+      if (!job) {
+        return reply.send({ status: 'unknown' });
+      }
+
+      const jobState = await job.getState();
+
+      if (jobState === 'completed') {
+        const result = job.returnvalue as { documentId: string } | undefined;
+        return reply.send({
+          status: 'completed',
+          ...(result?.documentId ? { documentId: result.documentId } : {}),
+        });
+      }
+
+      if (jobState === 'failed') {
+        return reply.send({
+          status: 'failed',
+          ...(job.failedReason ? { error: job.failedReason } : {}),
+        });
+      }
+
+      if (jobState === 'active') {
+        return reply.send({ status: 'active' });
+      }
+
+      // 'delayed' (retrying), 'waiting', 'prioritized', 'paused' → all mean "still in queue"
+      return reply.send({ status: 'waiting' });
     },
   );
 

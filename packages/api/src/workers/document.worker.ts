@@ -1,4 +1,4 @@
-import { Worker, type Job } from 'bullmq';
+import { Worker, UnrecoverableError, type Job } from 'bullmq';
 import { redis } from '../infrastructure/redis.js';
 import { downloadFile } from '../infrastructure/storage.js';
 import { db } from '../infrastructure/db.js';
@@ -85,10 +85,32 @@ async function processDocument(
   return { documentId: document.id };
 }
 
+function isUniqueConstraintError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code: unknown }).code === 'P2002'
+  );
+}
+
+async function safeProcessDocument(job: Job<DocumentProcessJobData>): Promise<{ documentId: string }> {
+  try {
+    return await processDocument(job);
+  } catch (err) {
+    if (isUniqueConstraintError(err)) {
+      throw new UnrecoverableError(
+        `Documento duplicado: mismo número, proveedor y fecha ya existe en el sistema`,
+      );
+    }
+    throw err;
+  }
+}
+
 export function startDocumentWorker(): Worker<DocumentProcessJobData> {
   const worker = new Worker<DocumentProcessJobData>(
     DOCUMENT_PROCESS_QUEUE,
-    processDocument,
+    safeProcessDocument,
     { connection: redis, concurrency: 2 },
   );
 

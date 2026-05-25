@@ -85,6 +85,16 @@ async function main() {
       name: "Juan Pérez (Monotributo)",
       phone: "+5491177778888",
     },
+    {
+      cuit: "30-71234567-9",
+      name: "Distribuidora La Popular S.A.",
+      address: "Av. Rivadavia 4521, CABA",
+    },
+    {
+      cuit: "30-65432198-2",
+      name: "Mayorista El Sol S.R.L.",
+      address: "Belgrano 2245, Avellaneda",
+    },
   ];
 
   for (const s of supplierData) {
@@ -187,6 +197,60 @@ async function main() {
       minStock: 10,
       aliases: ["vinagre blanco", "vinagre 500"],
       typicalRange: { min: 5, max: 120 },
+    },
+    {
+      code: "DET-001",
+      name: "Detergente concentrado 5 LT",
+      unit: "un",
+      stockOnHand: 30,
+      minStock: 10,
+      aliases: ["detergente concentrado", "detergente 5L", "detergente 5 litros"],
+      typicalRange: { min: 5, max: 100 },
+    },
+    {
+      code: "LAV-002",
+      name: "Lavandina 4 LT con jabón",
+      unit: "un",
+      stockOnHand: 45,
+      minStock: 15,
+      aliases: ["lavandina 4L", "lavandina con jabon", "lavandina jabón"],
+      typicalRange: { min: 5, max: 150 },
+    },
+    {
+      code: "PAP-004",
+      name: "Papel higiénico 4 unidades x 30 mts",
+      unit: "fardo",
+      stockOnHand: 20,
+      minStock: 8,
+      aliases: ["papel higienico 4u", "papel higienico 30m", "papel toilet 4u"],
+      typicalRange: { min: 2, max: 80 },
+    },
+    {
+      code: "JAB-008",
+      name: "Jabón en polvo 3 kg multiacción",
+      unit: "un",
+      stockOnHand: 25,
+      minStock: 10,
+      aliases: ["jabon en polvo 3kg", "jabón polvo multiaccion", "detersor 3kg"],
+      typicalRange: { min: 5, max: 120 },
+    },
+    {
+      code: "ESP-012",
+      name: "Esponja doble cara x 3 unidades",
+      unit: "blister",
+      stockOnHand: 60,
+      minStock: 20,
+      aliases: ["esponja doble cara", "esponja x3", "esponja verde amarilla"],
+      typicalRange: { min: 6, max: 200 },
+    },
+    {
+      code: "LMP-007",
+      name: "Limpiador multiuso 1L cítrico",
+      unit: "un",
+      stockOnHand: 35,
+      minStock: 15,
+      aliases: ["limpiador multiuso", "limpiador citrico 1L", "multiuso citrico"],
+      typicalRange: { min: 5, max: 150 },
     },
   ];
 

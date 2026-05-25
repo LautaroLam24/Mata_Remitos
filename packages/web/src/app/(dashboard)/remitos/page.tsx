@@ -1,43 +1,161 @@
-import Link from "next/link";
-import { Plus, FileText } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+'use client';
+
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
+import { ColumnDef } from '@tanstack/react-table';
+import { api, DocumentListItem, DocumentListParams } from '@/lib/api';
+import { DataTable } from '@/components/ui/data-table';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useDebounce } from '@/hooks/useDebounce';
+
+const STATUS_LABELS: Record<string, string> = {
+  all: 'Todos',
+  processing: 'Procesando',
+  review_needed: 'En revisión',
+  approved: 'Aprobado',
+  rejected: 'Rechazado',
+};
+
+const STATUS_VARIANTS: Record<string, string> = {
+  approved: 'bg-green-500 text-white',
+  rejected: 'bg-destructive text-destructive-foreground',
+  review_needed: 'bg-yellow-500 text-white',
+  processing: 'bg-muted text-muted-foreground',
+};
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <Badge className={STATUS_VARIANTS[status] ?? 'bg-muted'}>
+      {STATUS_LABELS[status] ?? status}
+    </Badge>
+  );
+}
+
+const columns: ColumnDef<DocumentListItem>[] = [
+  {
+    accessorKey: 'createdAt',
+    header: 'Fecha',
+    cell: ({ row }) =>
+      new Date(row.original.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+  },
+  { accessorKey: 'documentNumber', header: 'Número' },
+  { accessorKey: 'supplierName', header: 'Proveedor' },
+  { accessorKey: 'itemCount', header: 'Items' },
+  {
+    accessorKey: 'overallConfidence',
+    header: 'Confianza',
+    cell: ({ row }) => `${row.original.overallConfidence}%`,
+  },
+  {
+    accessorKey: 'status',
+    header: 'Estado',
+    cell: ({ row }) => <StatusBadge status={row.original.status} />,
+  },
+];
+
+function RemitosPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<NonNullable<DocumentListParams['status']>>(
+    (searchParams.get('status') as NonNullable<DocumentListParams['status']>) ?? 'all',
+  );
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['remitos', { page, search: debouncedSearch, status, dateFrom, dateTo }],
+    queryFn: () =>
+      api.remitos.list({
+        page,
+        status,
+        ...(debouncedSearch ? { search: debouncedSearch } : {}),
+        ...(dateFrom ? { dateFrom } : {}),
+        ...(dateTo ? { dateTo } : {}),
+      }),
+  });
+
+  return (
+    <div className="space-y-6 p-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Remitos</h1>
+        <Button onClick={() => router.push('/remitos/nuevo')}>Nuevo remito</Button>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <Input
+          placeholder="Buscar por número..."
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          className="max-w-xs"
+        />
+        <Select
+          value={status}
+          onValueChange={(v) => { setStatus(v as NonNullable<DocumentListParams['status']>); setPage(1); }}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(STATUS_LABELS).map(([v, l]) => (
+              <SelectItem key={v} value={v}>{l}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+          className="w-40"
+        />
+        <Input
+          type="date"
+          value={dateTo}
+          onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+          className="w-40"
+        />
+        {(search || status !== 'all' || dateFrom || dateTo) && (
+          <Button
+            variant="outline"
+            onClick={() => { setSearch(''); setStatus('all'); setDateFrom(''); setDateTo(''); setPage(1); }}
+          >
+            Limpiar filtros
+          </Button>
+        )}
+      </div>
+
+      <DataTable
+        columns={columns}
+        data={data?.items ?? []}
+        isLoading={isLoading}
+        emptyMessage="No hay remitos con esos filtros."
+        onRowClick={(doc) => router.push(`/remitos/${doc.id}`)}
+      />
+
+      {data && data.totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>{data.total} remitos — página {page} de {data.totalPages}</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page === 1}>Anterior</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page === data.totalPages}>Siguiente</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function RemitosPage() {
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Remitos</h1>
-          <p className="text-sm text-muted-foreground">
-            Historial de documentos procesados
-          </p>
-        </div>
-        <Button asChild>
-          <Link href="/remitos/nuevo">
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo
-          </Link>
-        </Button>
-      </div>
-
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="mb-4 rounded-full bg-muted p-4">
-            <FileText className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <p className="text-base font-medium">Sin remitos todavía</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Subí tu primer remito tomando una foto o cargando una imagen.
-          </p>
-          <Button asChild className="mt-6">
-            <Link href="/remitos/nuevo">
-              <Plus className="mr-2 h-4 w-4" />
-              Subir primer remito
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
+    <Suspense fallback={<div className="p-6 text-muted-foreground">Cargando...</div>}>
+      <RemitosPageInner />
+    </Suspense>
   );
 }

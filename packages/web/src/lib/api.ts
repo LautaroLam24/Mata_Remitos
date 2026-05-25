@@ -187,6 +187,148 @@ export interface ReviewQueueResponse {
   limit: number;
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function qs(params: Record<string, string | number | boolean | undefined>): string {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') p.set(k, String(v));
+  }
+  return p.toString();
+}
+
+// ── Productos types ───────────────────────────────────────────────────────────
+
+export interface Producto {
+  id: string;
+  code: string;
+  name: string;
+  unit: string;
+  stockOnHand: number;
+  minStock: number | null;
+  aliases: string[];
+  deletedAt: string | null;
+  createdAt: string;
+}
+
+export interface StockMovimiento {
+  id: string;
+  type: string;
+  reason: string;
+  reference: string | null;
+  quantity: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  createdAt: string;
+  user: { name: string; email: string };
+}
+
+export interface ProductoDetail extends Producto {
+  stockMovements: StockMovimiento[];
+}
+
+export interface ProductoListResponse {
+  items: Producto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ProductoCreate {
+  code: string;
+  name: string;
+  unit: string;
+  minStock: number | null;
+  stockOnHand: number;
+  aliases: string[];
+}
+
+export interface ProductoUpdate {
+  code?: string;
+  name?: string;
+  unit?: string;
+  minStock?: number | null;
+  aliases?: string[];
+}
+
+// ── Proveedores types ─────────────────────────────────────────────────────────
+
+export interface Proveedor {
+  id: string;
+  name: string;
+  cuit: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  createdAt: string;
+}
+
+export interface ProveedorListResponse {
+  items: Proveedor[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ProveedorCreate {
+  name: string;
+  cuit: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+}
+
+// ── Stock types ───────────────────────────────────────────────────────────────
+
+export interface StockAlertProduct {
+  id: string;
+  code: string;
+  name: string;
+  unit: string;
+  stockOnHand: number;
+  minStock: number | null;
+}
+
+export interface StockAlertsResponse {
+  critical: StockAlertProduct[];
+  atRisk: StockAlertProduct[];
+}
+
+// ── Remitos list types ────────────────────────────────────────────────────────
+
+export interface DocumentListItem {
+  id: string;
+  documentNumber: string;
+  type: string;
+  date: string;
+  status: string;
+  overallConfidence: number;
+  itemCount: number;
+  supplierName: string;
+  supplierCuit: string;
+  createdAt: string;
+}
+
+export interface DocumentListResponse {
+  items: DocumentListItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface DocumentListParams {
+  page?: number;
+  limit?: number;
+  status?: 'all' | 'processing' | 'review_needed' | 'approved' | 'rejected';
+  supplierId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+}
+
 // ── Auth types ───────────────────────────────────────────────────────────────
 
 export interface AuthResponse {
@@ -255,5 +397,32 @@ export const api = {
 
     getReviewQueue: (page = 1, limit = 20) =>
       request<ReviewQueueResponse>(`/api/remitos/review-queue?page=${page}&limit=${limit}`),
+
+    list: (p: DocumentListParams = {}) =>
+      request<DocumentListResponse>(`/api/remitos?${qs({ page: p.page ?? 1, limit: p.limit ?? 20, status: p.status ?? 'all', supplierId: p.supplierId, dateFrom: p.dateFrom, dateTo: p.dateTo, search: p.search })}`),
+  },
+
+  productos: {
+    list: (p: { page?: number; search?: string; lowStock?: boolean } = {}) =>
+      request<ProductoListResponse>(`/api/productos?${qs({ page: p.page ?? 1, search: p.search, lowStock: p.lowStock })}`),
+    getById: (id: string) => request<ProductoDetail>(`/api/productos/${id}`),
+    create: (body: ProductoCreate) =>
+      request<Producto>('/api/productos', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: ProductoUpdate) =>
+      request<Producto>(`/api/productos/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    delete: (id: string) => request<{ id: string; deletedAt: string }>(`/api/productos/${id}`, { method: 'DELETE' }),
+  },
+
+  proveedores: {
+    list: (p: { page?: number; search?: string } = {}) =>
+      request<ProveedorListResponse>(`/api/proveedores?${qs({ page: p.page ?? 1, search: p.search })}`),
+    create: (body: ProveedorCreate) =>
+      request<Proveedor>('/api/proveedores', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: Partial<ProveedorCreate>) =>
+      request<Proveedor>(`/api/proveedores/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  },
+
+  stock: {
+    alerts: () => request<StockAlertsResponse>('/api/stock/alerts'),
   },
 };

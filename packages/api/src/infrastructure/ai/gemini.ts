@@ -35,9 +35,22 @@ export async function callGeminiVision(imageBuffer: Buffer, prompt: string): Pro
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       const msg = lastError.message;
-      if (msg.includes('429') || msg.includes('quota')) {
+      console.warn(`[OCR] Gemini ${modelName} error: ${msg}`);
+      if (
+        msg.includes('429') ||
+        msg.includes('quota') ||
+        msg.includes('RESOURCE_EXHAUSTED')
+      ) {
         console.warn(`[OCR] Gemini ${modelName}: quota exceeded, trying next model`);
         continue;
+      }
+      // Auth error (invalid key, wrong project) — no point retrying other models
+      if (
+        msg.includes('API key not valid') ||
+        msg.includes('PERMISSION_DENIED') ||
+        msg.includes('403')
+      ) {
+        throw new Error(`Gemini API key inválida o sin permisos: ${msg}`);
       }
       throw lastError;
     }

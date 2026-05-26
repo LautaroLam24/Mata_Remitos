@@ -8,9 +8,9 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// Hash placeholder de "password123" — solo para desarrollo local.
+// Hash de "password123" generado con bcryptjs (cost=10) — solo para desarrollo local.
 const DEV_PASSWORD_HASH =
-  "$2b$10$K7TaG8aXQW5GHfF5hq6ozeQkPf.JV1WQhLqKf9Rt5cBfQGUGn5mGe";
+  "$2b$10$sZp1MIDkLwREKh29.3L8suKTVCYG02Eo8OODRLZwf9Zt29ZTNOfOm";
 
 async function main() {
   console.log("Iniciando seed...\n");

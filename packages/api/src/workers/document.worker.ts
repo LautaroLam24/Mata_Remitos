@@ -3,6 +3,7 @@ import { redis } from '../infrastructure/redis.js';
 import { downloadFile } from '../infrastructure/storage.js';
 import { db } from '../infrastructure/db.js';
 import { extractDocument } from '../features/ocr/extractor.js';
+import { matchProduct } from '../features/remitos/validators/matchProduct.js';
 import {
   DOCUMENT_PROCESS_QUEUE,
   type DocumentProcessJobData,
@@ -42,6 +43,11 @@ async function processDocument(
     extraction.supplier.name.value,
   );
 
+  const catalog = await db.product.findMany({
+    where: { tenantId, deletedAt: null },
+    select: { id: true, name: true, code: true, aliases: true },
+  });
+
   const imageUrl = `${config.STORAGE_PUBLIC_URL}/${imageKey}`;
   const documentDate = new Date(extraction.date.value);
 
@@ -65,6 +71,8 @@ async function processDocument(
     });
 
     for (const item of extraction.items) {
+      const match = matchProduct(item.description.value, catalog);
+
       await tx.documentItem.create({
         data: {
           tenantId,
@@ -74,7 +82,9 @@ async function processDocument(
           unit: item.unit.value,
           unitPrice: item.unitPrice.value ?? null,
           confidenceScore: item.quantity.confidence,
-          matchStatus: 'pending',
+          matchStatus: match ? 'matched' : 'new_product',
+          matchScore: match?.score ?? null,
+          ...(match ? { productId: match.productId } : {}),
         },
       });
     }

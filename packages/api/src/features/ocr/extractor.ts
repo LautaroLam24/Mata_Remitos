@@ -117,6 +117,7 @@ export async function extractDocument(imageBuffer: Buffer): Promise<ExtractionRe
 
   // First pass: Gemini
   let geminiQuotaExceeded = false;
+  let geminiKeyInvalid = false;
   try {
     const raw = await callGeminiVision(optimized, EXTRACTION_PROMPT);
     const parsed = parseJsonResponse(raw);
@@ -126,8 +127,10 @@ export async function extractDocument(imageBuffer: Buffer): Promise<ExtractionRe
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn('[OCR] Gemini failed:', msg);
-    if (msg.includes('429') || msg.includes('quota')) {
+    if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
       geminiQuotaExceeded = true;
+    } else if (msg.includes('inválida') || msg.includes('PERMISSION_DENIED') || msg.includes('API key not valid')) {
+      geminiKeyInvalid = true;
     }
   }
 
@@ -141,12 +144,17 @@ export async function extractDocument(imageBuffer: Buffer): Promise<ExtractionRe
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn('[OCR] Claude failed:', msg);
-    // If both APIs are quota/unconfigured, fail fast without retries
+    // Fail fast for unrecoverable config errors
+    if (geminiKeyInvalid) {
+      throw new UnrecoverableError(
+        'GEMINI_API_KEY inválida o sin permisos — creá una key nueva en aistudio.google.com/apikey con "Create API key in new project"',
+      );
+    }
     if (geminiQuotaExceeded || msg.includes('API_KEY')) {
       throw new UnrecoverableError(
         geminiQuotaExceeded
-          ? 'Gemini quota exceeded — configure a new GEMINI_API_KEY or set OCR_MOCK=true'
-          : 'No AI provider configured — set GEMINI_API_KEY or ANTHROPIC_API_KEY',
+          ? 'Gemini quota exceeded — configurá una nueva GEMINI_API_KEY o activá OCR_MOCK=true'
+          : 'No AI provider configured — configurá GEMINI_API_KEY o ANTHROPIC_API_KEY',
       );
     }
   }

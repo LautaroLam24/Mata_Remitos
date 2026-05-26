@@ -329,6 +329,25 @@ export interface DocumentListParams {
   search?: string;
 }
 
+// ── Dashboard types ───────────────────────────────────────────────────────────
+
+export interface DashboardActivity {
+  id: string;
+  documentNumber: string;
+  supplierName: string;
+  status: string;
+  overallConfidence: number;
+  createdAt: string;
+}
+
+export interface DashboardMetrics {
+  remitosThisMonth: number;
+  enRevision: number;
+  productosActivos: number;
+  precisionOcr: number | null;
+  recentActivity: DashboardActivity[];
+}
+
 // ── Auth types ───────────────────────────────────────────────────────────────
 
 export interface AuthResponse {
@@ -424,5 +443,9 @@ export const api = {
 
   stock: {
     alerts: () => request<StockAlertsResponse>('/api/stock/alerts'),
+  },
+
+  dashboard: {
+    metrics: () => request<DashboardMetrics>('/api/dashboard/metrics'),
   },
 };

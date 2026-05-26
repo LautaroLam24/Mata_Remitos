@@ -8,6 +8,7 @@ import {
   DOCUMENT_PROCESS_QUEUE,
   type DocumentProcessJobData,
 } from '../infrastructure/queue.js';
+import { enqueueNotification, getTenantOwnerEmails } from '../features/notifications/service.js';
 // Worker uses redis directly (separate from the Queue connection)
 import { config } from '../shared/config.js';
 
@@ -91,6 +92,26 @@ async function processDocument(
 
     return doc;
   });
+
+  // Notify tenant owners about new document pending review
+  const ownerEmails = await getTenantOwnerEmails(tenantId);
+  for (const email of ownerEmails) {
+    await enqueueNotification({
+      tenantId,
+      channel: 'email',
+      to: email,
+      template: 'document.processed',
+      params: {
+        documentNumber: extraction.documentNumber.value,
+        supplierName: extraction.supplier.name.value,
+        confidence: extraction.overallConfidence,
+        documentId: document.id,
+      },
+      correlationId: `doc-processed-${document.id}-${email}`,
+    }).catch((err: unknown) => {
+      console.error(`[Worker] Failed to enqueue notification: ${String(err)}`);
+    });
+  }
 
   return { documentId: document.id };
 }

@@ -13,6 +13,9 @@ const envSchema = z.object({
   STORAGE_SECRET_KEY: z.string().min(1),
   STORAGE_REGION: z.string().default('us-east-1'),
   STORAGE_PUBLIC_URL: z.string().url(),
+  RESEND_API_KEY: z.string().min(1).optional(),
+  RESEND_FROM_EMAIL: z.string().email().optional(),
+  OCR_MOCK: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

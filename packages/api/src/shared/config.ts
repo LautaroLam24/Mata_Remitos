@@ -6,7 +6,8 @@ const envSchema = z.object({
   REDIS_URL: z.string().min(1),
   JWT_SECRET: z.string().min(32),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  GEMINI_API_KEY: z.string().min(1),
+  GEMINI_API_KEY: z.string().min(1).optional(),
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
   STORAGE_ENDPOINT: z.string().url(),
   STORAGE_BUCKET: z.string().min(1),
   STORAGE_ACCESS_KEY: z.string().min(1),
@@ -14,14 +15,30 @@ const envSchema = z.object({
   STORAGE_REGION: z.string().default('us-east-1'),
   STORAGE_PUBLIC_URL: z.string().url(),
   RESEND_API_KEY: z.string().min(1).optional(),
-  RESEND_FROM_EMAIL: z.string().email().optional(),
+  RESEND_FROM_EMAIL: z.string().min(1).optional(),
   OCR_MOCK: z.string().optional(),
 });
 
-const parsed = envSchema.safeParse(process.env);
+// Dotenv sets unset optional vars to "" (empty string) — treat them as undefined
+const rawEnv = Object.fromEntries(
+  Object.entries(process.env).map(([k, v]) => [k, v === '' ? undefined : v]),
+);
+
+const parsed = envSchema.safeParse(rawEnv);
 if (!parsed.success) {
   console.error('Invalid environment variables:');
   console.error(JSON.stringify(parsed.error.flatten().fieldErrors, null, 2));
+  process.exit(1);
+}
+
+if (
+  parsed.data.OCR_MOCK !== 'true' &&
+  !parsed.data.GEMINI_API_KEY &&
+  !parsed.data.ANTHROPIC_API_KEY
+) {
+  console.error(
+    '❌ Se requiere GEMINI_API_KEY o ANTHROPIC_API_KEY cuando OCR_MOCK no es "true"',
+  );
   process.exit(1);
 }
 

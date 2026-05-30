@@ -10,6 +10,9 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
       GEMINI_API_KEY: 'test-gemini-key',
+      ANTHROPIC_API_KEY: 'test-anthropic-key',
+      RESEND_API_KEY: 'test-resend-key',
+      RESEND_FROM_EMAIL: 'test@mataremitos.com',
       STORAGE_ENDPOINT: 'http://localhost:9000',
       STORAGE_BUCKET: 'test-bucket',
       STORAGE_ACCESS_KEY: 'minioadmin',

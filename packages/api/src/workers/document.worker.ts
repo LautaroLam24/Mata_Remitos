@@ -30,13 +30,25 @@ async function findOrCreateSupplier(
   return created.id;
 }
 
+function inferMimeTypeFromKey(key: string): string {
+  const ext = key.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'png': return 'image/png';
+    case 'webp': return 'image/webp';
+    case 'jpg':
+    case 'jpeg':
+    default: return 'image/jpeg';
+  }
+}
+
 async function processDocument(
   job: Job<DocumentProcessJobData>,
 ): Promise<{ documentId: string }> {
   const { imageKey, tenantId, userId } = job.data;
 
   const imageBuffer = await downloadFile(imageKey);
-  const extraction = await extractDocument(imageBuffer);
+  const mimeType = inferMimeTypeFromKey(imageKey);
+  const extraction = await extractDocument(imageBuffer, mimeType);
 
   const supplierId = await findOrCreateSupplier(
     tenantId,

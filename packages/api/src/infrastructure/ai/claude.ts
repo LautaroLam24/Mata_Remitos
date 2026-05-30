@@ -8,8 +8,18 @@ function getClient(): Anthropic {
   return new Anthropic({ apiKey: key });
 }
 
-export async function callClaudeVision(imageBuffer: Buffer, prompt: string): Promise<string> {
+export async function callClaudeVision(
+  buffer: Buffer,
+  prompt: string,
+  mimeType: string = 'image/jpeg',
+): Promise<string> {
   const client = getClient();
+
+  const validMediaType = (
+    ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mimeType)
+      ? mimeType
+      : 'image/jpeg'
+  ) as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 
   const message = await client.messages.create({
     model: MODEL,
@@ -22,8 +32,8 @@ export async function callClaudeVision(imageBuffer: Buffer, prompt: string): Pro
             type: 'image',
             source: {
               type: 'base64',
-              media_type: 'image/jpeg',
-              data: imageBuffer.toString('base64'),
+              media_type: validMediaType,
+              data: buffer.toString('base64'),
             },
           },
           { type: 'text', text: prompt },

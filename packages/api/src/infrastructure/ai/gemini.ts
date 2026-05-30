@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 
 function getClient(): GoogleGenerativeAI {
   const key = process.env['GEMINI_API_KEY'];
@@ -8,13 +8,18 @@ function getClient(): GoogleGenerativeAI {
   return new GoogleGenerativeAI(key);
 }
 
-async function callModel(modelName: string, imageBuffer: Buffer, prompt: string): Promise<string> {
+async function callModel(
+  modelName: string,
+  buffer: Buffer,
+  prompt: string,
+  mimeType: string = 'image/jpeg',
+): Promise<string> {
   const genAI = getClient();
   const model = genAI.getGenerativeModel({ model: modelName });
 
   const result = await model.generateContent([
     { text: prompt },
-    { inlineData: { mimeType: 'image/jpeg', data: imageBuffer.toString('base64') } },
+    { inlineData: { mimeType, data: buffer.toString('base64') } },
   ]);
 
   const text = result.response.text();
@@ -22,12 +27,16 @@ async function callModel(modelName: string, imageBuffer: Buffer, prompt: string)
   return text;
 }
 
-export async function callGeminiVision(imageBuffer: Buffer, prompt: string): Promise<string> {
+export async function callGeminiVision(
+  buffer: Buffer,
+  prompt: string,
+  mimeType: string = 'image/jpeg',
+): Promise<string> {
   let lastError: Error | undefined;
 
   for (const modelName of MODELS) {
     try {
-      const text = await callModel(modelName, imageBuffer, prompt);
+      const text = await callModel(modelName, buffer, prompt, mimeType);
       if (modelName !== MODELS[0]) {
         console.log(`[OCR] Gemini: using fallback model ${modelName}`);
       }

@@ -107,19 +107,24 @@ async function tryExtract(
   }
 }
 
-export async function extractDocument(imageBuffer: Buffer): Promise<ExtractionResult> {
+export async function extractDocument(
+  buffer: Buffer,
+  mimeType: string = 'image/jpeg',
+): Promise<ExtractionResult> {
   if (process.env['OCR_MOCK'] === 'true') {
     console.log('[OCR] Mock mode — skipping AI call');
     return getMockExtraction();
   }
 
-  const optimized = await preprocessImage(imageBuffer);
+  // preprocessImage always returns JPEG regardless of input format
+  const optimized = await preprocessImage(buffer);
+  const effectiveMimeType = 'image/jpeg';
 
   // First pass: Gemini
   let geminiQuotaExceeded = false;
   let geminiKeyInvalid = false;
   try {
-    const raw = await callGeminiVision(optimized, EXTRACTION_PROMPT);
+    const raw = await callGeminiVision(optimized, EXTRACTION_PROMPT, effectiveMimeType);
     const parsed = parseJsonResponse(raw);
     const validated = extractionResultSchema.safeParse(parsed);
     if (validated.success) return validated.data;
@@ -136,7 +141,7 @@ export async function extractDocument(imageBuffer: Buffer): Promise<ExtractionRe
 
   // Fallback: Claude
   try {
-    const raw = await callClaudeVision(optimized, EXTRACTION_PROMPT);
+    const raw = await callClaudeVision(optimized, EXTRACTION_PROMPT, effectiveMimeType);
     const parsed = parseJsonResponse(raw);
     const validated = extractionResultSchema.safeParse(parsed);
     if (validated.success) return validated.data;

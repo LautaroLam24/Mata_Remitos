@@ -331,21 +331,42 @@ export interface DocumentListParams {
 
 // ── Dashboard types ───────────────────────────────────────────────────────────
 
-export interface DashboardActivity {
-  id: string;
-  documentNumber: string;
-  supplierName: string;
-  status: string;
-  overallConfidence: number;
-  createdAt: string;
+export type DashboardPeriod = '7d' | '30d' | '3m' | '6m' | '12m';
+
+export interface DashboardKpiValue {
+  value: number;
+  previousValue: number;
+  variationPct: number;
 }
 
 export interface DashboardMetrics {
-  remitosThisMonth: number;
-  enRevision: number;
-  productosActivos: number;
-  precisionOcr: number | null;
-  recentActivity: DashboardActivity[];
+  period: string;
+  kpis: {
+    totalDocuments: DashboardKpiValue;
+    approvedDocuments: DashboardKpiValue;
+    timeSavedMinutes: { value: number; estimatedSavingsArs: number };
+    pendingReview: { value: number; olderThanWeekCount: number };
+  };
+  charts: {
+    documentsPerMonth: Array<{ month: string; approved: number; rejected: number; review: number }>;
+    topSuppliers: Array<{ supplierId: string; supplierName: string; documentCount: number; totalItems: number }>;
+    topProducts: Array<{ productId: string; productName: string; totalQuantity: number; documentCount: number }>;
+    documentTypeDistribution: Array<{ type: string; count: number; percentage: number }>;
+  };
+  alerts: Array<{
+    type: 'info' | 'warning' | 'critical';
+    title: string;
+    description: string;
+    actionUrl: string | null;
+  }>;
+  recentActivity: Array<{
+    id: string;
+    type: string;
+    supplierName: string;
+    documentNumber: string;
+    status: string;
+    createdAt: string;
+  }>;
 }
 
 // ── Auth types ───────────────────────────────────────────────────────────────
@@ -446,6 +467,7 @@ export const api = {
   },
 
   dashboard: {
-    metrics: () => request<DashboardMetrics>('/api/dashboard/metrics'),
+    metrics: (period: DashboardPeriod = '6m') =>
+      request<DashboardMetrics>(`/api/dashboard/metrics?period=${period}`),
   },
 };

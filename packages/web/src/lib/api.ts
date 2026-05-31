@@ -81,6 +81,25 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+async function requestBlob(path: string): Promise<Blob> {
+  let token = authStore.getAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  let res = await fetch(`${API_BASE}${path}`, { headers });
+
+  if (res.status === 401) {
+    const newToken = await tryRefresh();
+    if (newToken) {
+      headers['Authorization'] = `Bearer ${newToken}`;
+      res = await fetch(`${API_BASE}${path}`, { headers });
+    }
+  }
+
+  if (!res.ok) throw await parseError(res);
+  return res.blob();
+}
+
 async function uploadFile<T>(path: string, file: File): Promise<T> {
   let token = authStore.getAccessToken();
   const headers: Record<string, string> = {};
@@ -117,6 +136,37 @@ export interface JobStatusResponse {
   error?: string;
 }
 
+// ── Raw extraction types (ExtractionResult from OCR pipeline) ─────────────────
+
+export interface FieldConfidence<T> {
+  value: T;
+  confidence: number;
+}
+
+export interface ExtractionItem {
+  code: FieldConfidence<string | null>;
+  description: FieldConfidence<string>;
+  quantity: FieldConfidence<number>;
+  unit: FieldConfidence<string>;
+  unitPrice: FieldConfidence<number | null>;
+  subtotal: FieldConfidence<number | null>;
+}
+
+export interface RawExtraction {
+  documentType: string;
+  documentNumber: FieldConfidence<string>;
+  date: FieldConfidence<string>;
+  supplier: {
+    cuit: FieldConfidence<string>;
+    name: FieldConfidence<string>;
+  };
+  items: ExtractionItem[];
+  total: FieldConfidence<number | null>;
+  rawText: string;
+  overallConfidence: number;
+  warnings: string[];
+}
+
 export interface DocumentItem {
   id: string;
   tenantId: string;
@@ -143,6 +193,7 @@ export interface DocumentDetail {
   date: string;
   status: string;
   overallConfidence: number;
+  rawExtraction: RawExtraction | null;
   warnings: string[];
   imageUrl: string;
   imageThumbnailUrl: string | null;
@@ -152,6 +203,29 @@ export interface DocumentDetail {
   createdAt: string;
   updatedAt: string;
   items: DocumentItem[];
+}
+
+// ── Validations ───────────────────────────────────────────────────────────────
+
+export type CheckStatus = 'passed' | 'warning' | 'failed';
+
+export interface ValidationCheck {
+  id: string;
+  label: string;
+  status: CheckStatus;
+  message: string;
+  details: string | null;
+}
+
+export interface DocumentValidationsResponse {
+  checks: ValidationCheck[];
+  summary: {
+    passed: number;
+    warnings: number;
+    failed: number;
+    canApprove: boolean;
+    duplicateId?: string;
+  };
 }
 
 export interface ApproveResponse {
@@ -426,8 +500,17 @@ export const api = {
     getDocument: (id: string) =>
       request<DocumentDetail>(`/api/remitos/${id}`),
 
+    getValidations: (id: string) =>
+      request<DocumentValidationsResponse>(`/api/remitos/${id}/validations`),
+
     approve: (id: string) =>
       request<ApproveResponse>(`/api/remitos/${id}/approve`, { method: "POST" }),
+
+    overrideApprove: (id: string, overrideReason: string) =>
+      request<ApproveResponse>(`/api/remitos/${id}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ overrideReason }),
+      }),
 
     reject: (id: string, reason?: string) =>
       request<RejectResponse>(`/api/remitos/${id}/reject`, {
@@ -440,6 +523,12 @@ export const api = {
 
     list: (p: DocumentListParams = {}) =>
       request<DocumentListResponse>(`/api/remitos?${qs({ page: p.page ?? 1, limit: p.limit ?? 20, status: p.status ?? 'all', supplierId: p.supplierId, dateFrom: p.dateFrom, dateTo: p.dateTo, search: p.search })}`),
+
+    exportExcel: (p: Omit<DocumentListParams, 'page' | 'limit'> = {}) =>
+      requestBlob(`/api/remitos/export/excel?${qs({ status: p.status, supplierId: p.supplierId, dateFrom: p.dateFrom, dateTo: p.dateTo, search: p.search })}`),
+
+    exportCsv: (p: Omit<DocumentListParams, 'page' | 'limit'> = {}) =>
+      requestBlob(`/api/remitos/export/csv?${qs({ status: p.status, supplierId: p.supplierId, dateFrom: p.dateFrom, dateTo: p.dateTo, search: p.search })}`),
   },
 
   productos: {

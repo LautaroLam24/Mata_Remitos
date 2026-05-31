@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useDebounce } from '@/hooks/useDebounce';
+import { ExportButton } from '@/components/features/ExportButton';
 
 const STATUS_LABELS: Record<string, string> = {
   all: 'Todos',
@@ -86,7 +87,19 @@ function RemitosPageInner() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Remitos</h1>
-        <Button onClick={() => router.push('/remitos/nuevo')}>Nuevo remito</Button>
+        <div className="flex gap-2">
+          <ExportButton
+            filters={{
+              status,
+              ...(debouncedSearch ? { search: debouncedSearch } : {}),
+              ...(dateFrom ? { dateFrom } : {}),
+              ...(dateTo ? { dateTo } : {}),
+            }}
+            data={data?.items ?? []}
+            totalDocs={data?.total ?? 0}
+          />
+          <Button onClick={() => router.push('/remitos/nuevo')}>Nuevo remito</Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3">

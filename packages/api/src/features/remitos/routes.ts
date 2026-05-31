@@ -16,6 +16,9 @@ import {
   documentListResponseSchema,
 } from './schemas.js';
 import { ValidationError } from '../../shared/errors.js';
+import { exportToExcel, exportToCsv } from './export-service.js';
+import { runValidations } from './validation-service.js';
+import { validationsResponseSchema } from './schemas.js';
 
 export const remitoRoutes: FastifyPluginAsync = async (app) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -155,7 +158,6 @@ export const remitoRoutes: FastifyPluginAsync = async (app) => {
         return reply.send({ status: 'active' });
       }
 
-      // 'delayed' (retrying), 'waiting', 'prioritized', 'paused' → all mean "still in queue"
       return reply.send({ status: 'waiting' });
     },
   );
@@ -181,6 +183,70 @@ export const remitoRoutes: FastifyPluginAsync = async (app) => {
         db,
       });
 
+      return reply.send(result);
+    },
+  );
+
+  // ─── Export ───────────────────────────────────────────────────────────────────
+
+  const exportQuerySchema = z.object({
+    status: z.enum(['all', 'processing', 'review_needed', 'approved', 'rejected']).optional(),
+    supplierId: z.string().optional(),
+    dateFrom: z.string().optional(),
+    dateTo: z.string().optional(),
+    search: z.string().optional(),
+  });
+
+  r.get(
+    '/export/excel',
+    {
+      schema: { querystring: exportQuerySchema },
+      preHandler: [app.authenticate, app.requireTenant],
+    },
+    async (req, reply) => {
+      const filters = { tenantId: req.tenant.id, ...req.query };
+      const buffer = await exportToExcel(filters);
+      const now = new Date();
+      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+      return reply
+        .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        .header('Content-Disposition', `attachment; filename="MataRemitos_Export_${stamp}.xlsx"`)
+        .send(buffer);
+    },
+  );
+
+  r.get(
+    '/export/csv',
+    {
+      schema: { querystring: exportQuerySchema },
+      preHandler: [app.authenticate, app.requireTenant],
+    },
+    async (req, reply) => {
+      const filters = { tenantId: req.tenant.id, ...req.query };
+      const csv = await exportToCsv(filters);
+      const now = new Date();
+      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+      return reply
+        .header('Content-Type', 'text/csv; charset=utf-8')
+        .header('Content-Disposition', `attachment; filename="MataRemitos_Export_${stamp}.csv"`)
+        .send(csv);
+    },
+  );
+
+  // ─── Validations ─────────────────────────────────────────────────────────────
+
+  r.get(
+    '/:id/validations',
+    {
+      schema: {
+        params: z.object({ id: z.string() }),
+        response: { 200: validationsResponseSchema },
+      },
+      preHandler: [app.authenticate, app.requireTenant],
+    },
+    async (req, reply) => {
+      const { id } = req.params;
+      const result = await runValidations({ id, tenantId: req.tenant.id });
       return reply.send(result);
     },
   );
@@ -225,12 +291,18 @@ export const remitoRoutes: FastifyPluginAsync = async (app) => {
     },
     async (req, reply) => {
       const { id } = req.params;
+      const body = req.body as { overrideReason?: unknown } | undefined;
+      const overrideReason =
+        typeof body?.overrideReason === 'string' && body.overrideReason.length > 0
+          ? body.overrideReason
+          : undefined;
 
       const result = await approveDocument({
         id,
         tenantId: req.tenant.id,
         userId: req.user.sub,
         db,
+        ...(overrideReason !== undefined ? { overrideReason } : {}),
       });
 
       return reply.send(result);
@@ -238,9 +310,6 @@ export const remitoRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // ─── Reject ───────────────────────────────────────────────────────────────────
-  // Body schema is intentionally omitted: `reason` is optional free-form text.
-  // Strict body schema would run before preHandler auth, returning 400 before 401
-  // for unauthenticated requests with no body.
 
   r.post(
     '/:id/reject',

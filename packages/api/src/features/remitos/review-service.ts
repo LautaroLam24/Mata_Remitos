@@ -136,9 +136,10 @@ export async function approveDocument(params: {
   id: string;
   tenantId: string;
   userId: string;
+  overrideReason?: string;
   db: PrismaClient;
 }): Promise<ApproveResult> {
-  const { id, tenantId, userId, db } = params;
+  const { id, tenantId, userId, overrideReason, db } = params;
 
   const doc = await db.document.findFirst({
     where: { id, tenantId, deletedAt: null },
@@ -203,8 +204,12 @@ export async function approveDocument(params: {
         userId,
         entityType: 'Document',
         entityId: doc.id,
-        action: 'approve',
-        changes: { before: { status: 'review_needed' }, after: { status: 'approved' } },
+        action: overrideReason ? 'override' : 'approve',
+        changes: {
+          before: { status: 'review_needed' },
+          after: { status: 'approved' },
+          ...(overrideReason !== undefined ? { overrideReason } : {}),
+        },
       },
     });
   });

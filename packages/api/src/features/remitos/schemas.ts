@@ -65,6 +65,7 @@ export const documentDetailResponseSchema = z.object({
   date: z.coerce.date(),
   status: z.string(),
   overallConfidence: z.number(),
+  rawExtraction: z.unknown(),
   warnings: z.array(z.string()),
   imageUrl: z.string(),
   imageThumbnailUrl: z.string().nullable(),
@@ -109,6 +110,29 @@ export const documentListResponseSchema = z.object({
   page: z.number(),
   limit: z.number(),
   totalPages: z.number(),
+});
+
+// ─── Validations ─────────────────────────────────────────────────────────────
+
+const checkStatusSchema = z.enum(['passed', 'warning', 'failed']);
+
+const validationCheckSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  status: checkStatusSchema,
+  message: z.string(),
+  details: z.string().nullable(),
+});
+
+export const validationsResponseSchema = z.object({
+  checks: z.array(validationCheckSchema),
+  summary: z.object({
+    passed: z.number(),
+    warnings: z.number(),
+    failed: z.number(),
+    canApprove: z.boolean(),
+    duplicateId: z.string().optional(),
+  }),
 });
 
 // ─── Approve / reject ────────────────────────────────────────────────────────

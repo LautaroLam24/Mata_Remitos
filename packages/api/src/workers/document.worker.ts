@@ -35,6 +35,7 @@ function inferMimeTypeFromKey(key: string): string {
   switch (ext) {
     case 'png': return 'image/png';
     case 'webp': return 'image/webp';
+    case 'pdf': return 'application/pdf';
     case 'jpg':
     case 'jpeg':
     default: return 'image/jpeg';

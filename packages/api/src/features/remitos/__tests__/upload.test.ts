@@ -110,7 +110,7 @@ describe('uploadDocument service — unit', () => {
 
   it('throws InvalidFileTypeError for non-image mimetype', async () => {
     const fakeFile = {
-      mimetype: 'application/pdf',
+      mimetype: 'text/plain',
       file: (async function* () {})(),
     } as unknown as MultipartFile;
 
@@ -119,8 +119,8 @@ describe('uploadDocument service — unit', () => {
     ).rejects.toThrow(InvalidFileTypeError);
   });
 
-  it('throws FileTooLargeError when chunks exceed 10MB', async () => {
-    const bigChunk = Buffer.alloc(11 * 1024 * 1024);
+  it('throws FileTooLargeError when chunks exceed 15MB', async () => {
+    const bigChunk = Buffer.alloc(16 * 1024 * 1024);
     const fakeFile = {
       mimetype: 'image/jpeg',
       file: (async function* () {
@@ -149,6 +149,26 @@ describe('uploadDocument service — unit', () => {
 
     expect(result.jobId).toBeTruthy();
     expect(result.imageKey).toMatch(/^tenant-1\/.+\.jpg$/);
+    expect(mockUploadFile).toHaveBeenCalledOnce();
+  });
+
+  it('returns jobId + imageKey with .pdf extension on valid PDF upload', async () => {
+    mockUploadFile.mockClear();
+    const fakeFile = {
+      mimetype: 'application/pdf',
+      file: (async function* () {
+        yield Buffer.from('%PDF-1.4 fake pdf data');
+      })(),
+    } as unknown as MultipartFile;
+
+    const result = await uploadDocument({
+      file: fakeFile,
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+    });
+
+    expect(result.jobId).toBeTruthy();
+    expect(result.imageKey).toMatch(/^tenant-1\/.+\.pdf$/);
     expect(mockUploadFile).toHaveBeenCalledOnce();
   });
 });

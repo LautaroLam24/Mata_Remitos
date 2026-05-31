@@ -116,9 +116,7 @@ export async function extractDocument(
     return getMockExtraction();
   }
 
-  // preprocessImage always returns JPEG regardless of input format
-  const optimized = await preprocessImage(buffer);
-  const effectiveMimeType = 'image/jpeg';
+  const { buffer: optimized, mimeType: effectiveMimeType } = await preprocessImage(buffer, mimeType);
 
   // First pass: Gemini
   let geminiQuotaExceeded = false;

@@ -15,11 +15,26 @@ export async function callClaudeVision(
 ): Promise<string> {
   const client = getClient();
 
-  const validMediaType = (
-    ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mimeType)
-      ? mimeType
-      : 'image/jpeg'
-  ) as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  const data = buffer.toString('base64');
+
+  const contentBlock =
+    mimeType === 'application/pdf'
+      ? ({
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data },
+        } as const)
+      : ({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: (
+              ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mimeType)
+                ? mimeType
+                : 'image/jpeg'
+            ) as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+            data,
+          },
+        } as const);
 
   const message = await client.messages.create({
     model: MODEL,
@@ -27,17 +42,7 @@ export async function callClaudeVision(
     messages: [
       {
         role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: validMediaType,
-              data: buffer.toString('base64'),
-            },
-          },
-          { type: 'text', text: prompt },
-        ],
+        content: [contentBlock, { type: 'text', text: prompt }],
       },
     ],
   });

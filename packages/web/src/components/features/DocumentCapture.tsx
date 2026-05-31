@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Camera, Upload, RefreshCw } from "lucide-react";
+import { Camera, Upload, RefreshCw, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -25,11 +25,15 @@ export function DocumentCapture({
     const file = e.target.files?.[0];
     if (!file) return;
     setSelectedFile(file);
-    setPreview(URL.createObjectURL(file));
+    if (file.type === 'application/pdf') {
+      setPreview('__pdf__');
+    } else {
+      setPreview(URL.createObjectURL(file));
+    }
   }
 
   function handleRetake() {
-    if (preview) URL.revokeObjectURL(preview);
+    if (preview && preview !== '__pdf__') URL.revokeObjectURL(preview);
     setPreview(null);
     setSelectedFile(null);
     if (cameraInputRef.current) cameraInputRef.current.value = "";
@@ -41,15 +45,24 @@ export function DocumentCapture({
   }
 
   if (preview) {
+    const isPdf = preview === '__pdf__';
     return (
       <div className="space-y-4">
-        <div className="overflow-hidden rounded-xl border bg-black">
-          <img
-            src={preview}
-            alt="Preview del remito"
-            className="max-h-[60vh] w-full object-contain"
-          />
-        </div>
+        {isPdf ? (
+          <div className="flex min-h-[200px] flex-col items-center justify-center rounded-xl border bg-muted/30 p-8 text-center">
+            <FileText className="mb-3 h-16 w-16 text-muted-foreground" />
+            <p className="text-sm font-medium">{selectedFile?.name}</p>
+            <p className="mt-1 text-xs text-muted-foreground">PDF listo para procesar</p>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-xl border bg-black">
+            <img
+              src={preview}
+              alt="Preview del remito"
+              className="max-h-[60vh] w-full object-contain"
+            />
+          </div>
+        )}
 
         {isUploading ? (
           <div className="space-y-2 rounded-lg border bg-muted/30 p-4">
@@ -132,7 +145,7 @@ export function DocumentCapture({
           ref={galleryInputRef}
           id="remito-gallery"
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/jpeg,image/png,image/webp,application/pdf"
           onChange={handleFileChange}
           className="sr-only"
         />
@@ -144,7 +157,7 @@ export function DocumentCapture({
           )}
         >
           <Upload className="h-4 w-4" />
-          Seleccionar imagen del dispositivo
+          Seleccionar imagen o PDF
         </div>
       </label>
     </div>

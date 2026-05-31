@@ -2,6 +2,7 @@
 
 import React, { createContext, useCallback, useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
 import { api, type AuthResponse, type LoginBody, type RegisterBody } from "@/lib/api";
 import { authStore, type StoredSession } from "@/lib/auth-store";
 
@@ -86,8 +87,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const queryClient = getQueryClient();
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>{children}</AuthProvider>
-    </QueryClientProvider>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>{children}</AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }

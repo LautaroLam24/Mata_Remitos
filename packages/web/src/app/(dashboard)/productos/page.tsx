@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ProductoForm } from '@/components/features/productos/ProductoForm';
 import { useDebounce } from '@/hooks/useDebounce';
+import { Package, Search } from 'lucide-react';
 
 function StockBadge({ stockOnHand, minStock }: { stockOnHand: number; minStock: number | null }) {
   if (stockOnHand <= 0) return <Badge variant="destructive">Sin stock</Badge>;
@@ -131,8 +132,27 @@ export default function ProductosPage() {
         columns={columns}
         data={data?.items ?? []}
         isLoading={isLoading}
-        emptyMessage="No hay productos."
         onRowClick={(p) => router.push(`/productos/${p.id}`)}
+        emptyContent={
+          debouncedSearch || lowStock ? (
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <Search className="h-10 w-10 text-muted-foreground/50" />
+              <p className="text-sm font-medium">Sin resultados</p>
+              <p className="text-xs text-muted-foreground">
+                {lowStock ? 'No hay productos con stock bajo.' : 'No encontramos productos con esos términos.'}
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <Package className="h-10 w-10 text-muted-foreground/50" />
+              <p className="text-sm font-medium">Sin productos</p>
+              <p className="text-xs text-muted-foreground">Agregá tu primer producto al catálogo.</p>
+              <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }}>
+                Nuevo producto
+              </Button>
+            </div>
+          )
+        }
       />
 
       {data && data.totalPages > 1 && (

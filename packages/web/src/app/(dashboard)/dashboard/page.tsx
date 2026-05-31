@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useTheme } from 'next-themes';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart,
@@ -42,6 +43,7 @@ import {
 } from '@/components/ui/select';
 import { api, type DashboardPeriod } from '@/lib/api';
 import { authStore } from '@/lib/auth-store';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -107,11 +109,24 @@ function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + '…' : s;
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Chart theme hook ──────────────────────────────────────────────────────────
 
-function Skeleton({ className }: { className?: string }) {
-  return <div className={`animate-pulse rounded bg-muted ${className ?? ''}`} />;
+function useChartTheme() {
+  const { resolvedTheme } = useTheme();
+  const dark = resolvedTheme === 'dark';
+  return {
+    tooltipStyle: {
+      background: dark ? 'hsl(0 0% 9%)' : '#ffffff',
+      border: `1px solid ${dark ? 'hsl(0 0% 14.9%)' : '#e5e7eb'}`,
+      borderRadius: 6,
+      fontSize: 12,
+      color: dark ? 'hsl(0 0% 98%)' : 'hsl(0 0% 3.9%)',
+    } as React.CSSProperties,
+    gridStroke: dark ? 'hsl(0 0% 14.9%)' : '#f0f0f0',
+  };
 }
+
+// ── Sub-components ────────────────────────────────────────────────────────────
 
 function VariationBadge({ pct }: { pct: number }) {
   if (pct > 0)
@@ -138,6 +153,7 @@ function VariationBadge({ pct }: { pct: number }) {
 export default function DashboardPage() {
   const [period, setPeriod] = useState<DashboardPeriod>('6m');
   const session = authStore.get();
+  const chartTheme = useChartTheme();
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-metrics', period],
@@ -302,7 +318,7 @@ export default function DashboardPage() {
             ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={data.charts.documentsPerMonth} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.gridStroke} />
                   <XAxis
                     dataKey="month"
                     tickFormatter={formatMonth}
@@ -310,7 +326,7 @@ export default function DashboardPage() {
                   />
                   <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
                   <Tooltip
-                    contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 12 }}
+                    contentStyle={chartTheme.tooltipStyle}
                     formatter={(value, name) => {
                       const labels: Record<string, string> = { approved: 'Aprobados', rejected: 'Rechazados', review: 'En revisión' };
                       return [value, labels[name as string] ?? name];
@@ -349,7 +365,7 @@ export default function DashboardPage() {
                   data={data.charts.topSuppliers}
                   margin={{ top: 0, right: 16, left: 4, bottom: 0 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.gridStroke} horizontal={false} />
                   <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
                   <YAxis
                     type="category"
@@ -359,7 +375,7 @@ export default function DashboardPage() {
                     tickFormatter={(v: string) => truncate(v, 20)}
                   />
                   <Tooltip
-                    contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 12 }}
+                    contentStyle={chartTheme.tooltipStyle}
                     formatter={(value, name) => {
                       const labels: Record<string, string> = { documentCount: 'Documentos', totalItems: 'Ítems' };
                       return [value, labels[name as string] ?? name];
@@ -444,7 +460,7 @@ export default function DashboardPage() {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 12 }}
+                    contentStyle={chartTheme.tooltipStyle}
                     formatter={(value, name) => [value, TYPE_LABELS[name as string] ?? name]}
                   />
                   <Legend
@@ -487,16 +503,16 @@ export default function DashboardPage() {
                         : Info;
                   const color =
                     alert.type === 'critical'
-                      ? 'text-red-600'
+                      ? 'text-red-600 dark:text-red-400'
                       : alert.type === 'warning'
-                        ? 'text-amber-600'
-                        : 'text-blue-600';
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-blue-600 dark:text-blue-400';
                   const bg =
                     alert.type === 'critical'
-                      ? 'bg-red-50 border-red-200'
+                      ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800'
                       : alert.type === 'warning'
-                        ? 'bg-amber-50 border-amber-200'
-                        : 'bg-blue-50 border-blue-200';
+                        ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
+                        : 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800';
                   return (
                     <div
                       key={i}

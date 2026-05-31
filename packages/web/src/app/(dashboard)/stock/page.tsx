@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { CheckCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api, StockAlertProduct } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function AlertCard({ product, variant }: { product: StockAlertProduct; variant: 'critical' | 'atRisk' }) {
   return (
@@ -38,6 +40,25 @@ function AlertCard({ product, variant }: { product: StockAlertProduct; variant: 
   );
 }
 
+function StockSkeletonGrid() {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Card key={i} className="border-l-4 border-l-muted">
+          <CardHeader className="pb-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-3 w-24 mt-1" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-3 w-3/4 mt-2" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 export default function StockPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['stock', 'alerts'],
@@ -49,41 +70,52 @@ export default function StockPage() {
   const atRisk = data?.atRisk ?? [];
   const total = critical.length + atRisk.length;
 
-  if (isLoading) return <div className="p-6 text-muted-foreground">Cargando alertas...</div>;
-
   return (
     <div className="space-y-8 p-6">
       <div>
         <h1 className="text-2xl font-semibold">Alertas de stock</h1>
-        {total === 0 && (
+        {!isLoading && total === 0 && (
           <p className="text-muted-foreground mt-1">Todos los productos tienen stock suficiente.</p>
         )}
       </div>
 
-      {critical.length > 0 && (
-        <section>
-          <h2 className="text-lg font-medium text-destructive mb-3">
-            Crítico — Sin stock ({critical.length})
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {critical.map((p) => (
-              <AlertCard key={p.id} product={p} variant="critical" />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {atRisk.length > 0 && (
-        <section>
-          <h2 className="text-lg font-medium text-yellow-600 mb-3">
-            En riesgo — Stock bajo mínimo ({atRisk.length})
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {atRisk.map((p) => (
-              <AlertCard key={p.id} product={p} variant="atRisk" />
-            ))}
-          </div>
-        </section>
+      {isLoading ? (
+        <StockSkeletonGrid />
+      ) : total === 0 ? (
+        <div className="flex flex-col items-center gap-4 py-16 text-center">
+          <CheckCircle className="h-12 w-12 text-green-500" />
+          <p className="text-lg font-medium text-green-700 dark:text-green-400">Todo en orden</p>
+          <p className="text-sm text-muted-foreground">
+            Todos los productos tienen stock por encima del mínimo.
+          </p>
+        </div>
+      ) : (
+        <>
+          {critical.length > 0 && (
+            <section>
+              <h2 className="text-lg font-medium text-destructive mb-3">
+                Crítico — Sin stock ({critical.length})
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {critical.map((p) => (
+                  <AlertCard key={p.id} product={p} variant="critical" />
+                ))}
+              </div>
+            </section>
+          )}
+          {atRisk.length > 0 && (
+            <section>
+              <h2 className="text-lg font-medium text-yellow-600 mb-3">
+                En riesgo — Stock bajo mínimo ({atRisk.length})
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {atRisk.map((p) => (
+                  <AlertCard key={p.id} product={p} variant="atRisk" />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
     </div>
   );

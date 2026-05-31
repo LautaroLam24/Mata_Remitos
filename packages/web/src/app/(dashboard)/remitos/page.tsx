@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Inbox, Search } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
 import { ExportButton } from '@/components/features/ExportButton';
 
@@ -148,8 +149,32 @@ function RemitosPageInner() {
         columns={columns}
         data={data?.items ?? []}
         isLoading={isLoading}
-        emptyMessage="No hay remitos con esos filtros."
         onRowClick={(doc) => router.push(`/remitos/${doc.id}`)}
+        emptyContent={
+          debouncedSearch || status !== 'all' || dateFrom || dateTo ? (
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <Search className="h-10 w-10 text-muted-foreground/50" />
+              <p className="text-sm font-medium">Sin resultados</p>
+              <p className="text-xs text-muted-foreground">No encontramos remitos con esos filtros.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { setSearch(''); setStatus('all'); setDateFrom(''); setDateTo(''); setPage(1); }}
+              >
+                Limpiar filtros
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <Inbox className="h-10 w-10 text-muted-foreground/50" />
+              <p className="text-sm font-medium">Tu bandeja está vacía</p>
+              <p className="text-xs text-muted-foreground">Empezá subiendo tu primer remito.</p>
+              <Button size="sm" onClick={() => router.push('/remitos/nuevo')}>
+                Subir remito
+              </Button>
+            </div>
+          )
+        }
       />
 
       {data && data.totalPages > 1 && (

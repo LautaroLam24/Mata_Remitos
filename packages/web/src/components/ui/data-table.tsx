@@ -14,12 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   isLoading?: boolean;
   emptyMessage?: string;
+  emptyContent?: React.ReactNode;
   onRowClick?: (row: TData) => void;
 }
 
@@ -28,6 +30,7 @@ export function DataTable<TData, TValue>({
   data,
   isLoading,
   emptyMessage = 'No hay datos.',
+  emptyContent,
   onRowClick,
 }: DataTableProps<TData, TValue>) {
   const table = useReactTable({
@@ -52,11 +55,15 @@ export function DataTable<TData, TValue>({
         </TableHeader>
         <TableBody>
           {isLoading ? (
-            <TableRow>
-              <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                Cargando...
-              </TableCell>
-            </TableRow>
+            Array.from({ length: 5 }).map((_, i) => (
+              <TableRow key={i}>
+                {columns.map((_, j) => (
+                  <TableCell key={j}>
+                    <Skeleton className="h-4 w-full" />
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))
           ) : table.getRowModel().rows.length ? (
             table.getRowModel().rows.map((row) => (
               <TableRow
@@ -71,6 +78,12 @@ export function DataTable<TData, TValue>({
                 ))}
               </TableRow>
             ))
+          ) : emptyContent ? (
+            <TableRow>
+              <TableCell colSpan={columns.length} className="h-40 text-center">
+                {emptyContent}
+              </TableCell>
+            </TableRow>
           ) : (
             <TableRow>
               <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">

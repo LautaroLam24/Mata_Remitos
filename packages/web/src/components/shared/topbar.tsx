@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu, LogOut } from "lucide-react";
+import { Menu, LogOut, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,10 +12,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useAuth } from "@/hooks/useAuth";
 
 interface TopbarProps {
   onMenuClick: () => void;
+  onSearchClick?: () => void;
 }
 
 function getInitials(name: string) {
@@ -27,7 +29,7 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-export function Topbar({ onMenuClick }: TopbarProps) {
+export function Topbar({ onMenuClick, onSearchClick }: TopbarProps) {
   const { session, logout } = useAuth();
   const router = useRouter();
 
@@ -48,13 +50,28 @@ export function Topbar({ onMenuClick }: TopbarProps) {
         <Menu className="h-5 w-5" />
       </Button>
 
+      {/* Cmd+K search hint */}
+      <button
+        onClick={onSearchClick}
+        className="hidden sm:flex items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+        aria-label="Buscar (Ctrl+K)"
+      >
+        <Search className="h-3.5 w-3.5" />
+        <span>Buscar...</span>
+        <kbd className="ml-2 hidden rounded bg-muted px-1.5 py-0.5 text-xs font-mono lg:inline-block">
+          Ctrl+K
+        </kbd>
+      </button>
+
       <div className="flex-1 lg:flex-none" />
 
       {session && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <span className="hidden text-sm text-muted-foreground sm:block">
             {session.tenant.name}
           </span>
+
+          <ThemeToggle />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

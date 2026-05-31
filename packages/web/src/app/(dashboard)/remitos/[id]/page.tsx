@@ -27,6 +27,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ConfidenceBadge } from '@/components/features/ConfidenceBadge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { api, type ValidationCheck, type RawExtraction, type ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -81,16 +83,16 @@ function CheckIcon({ status }: { status: ValidationCheck['status'] }) {
 function CheckRow({ check }: { check: ValidationCheck }) {
   const borderCls =
     check.status === 'passed'
-      ? 'border-green-100'
+      ? 'border-green-100 dark:border-green-900'
       : check.status === 'warning'
-        ? 'border-amber-100'
-        : 'border-red-100';
+        ? 'border-amber-100 dark:border-amber-900'
+        : 'border-red-100 dark:border-red-900';
   const bgCls =
     check.status === 'passed'
-      ? 'bg-green-50/50'
+      ? 'bg-green-50/50 dark:bg-green-950/30'
       : check.status === 'warning'
-        ? 'bg-amber-50/50'
-        : 'bg-red-50/50';
+        ? 'bg-amber-50/50 dark:bg-amber-950/30'
+        : 'bg-red-50/50 dark:bg-red-950/30';
 
   return (
     <div className={cn('flex items-start gap-3 rounded-lg border p-3', borderCls, bgCls)}>
@@ -111,17 +113,17 @@ function CheckRow({ check }: { check: ValidationCheck }) {
 function SummaryCards({ passed, warnings, failed }: { passed: number; warnings: number; failed: number }) {
   return (
     <div className="grid grid-cols-3 gap-2">
-      <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-center">
-        <div className="text-2xl font-bold text-green-700">{passed}</div>
-        <div className="text-xs text-green-600">Pasadas</div>
+      <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-3 text-center">
+        <div className="text-2xl font-bold text-green-700 dark:text-green-400">{passed}</div>
+        <div className="text-xs text-green-600 dark:text-green-500">Pasadas</div>
       </div>
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center">
-        <div className="text-2xl font-bold text-amber-700">{warnings}</div>
-        <div className="text-xs text-amber-600">Advertencias</div>
+      <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 text-center">
+        <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">{warnings}</div>
+        <div className="text-xs text-amber-600 dark:text-amber-500">Advertencias</div>
       </div>
-      <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-center">
-        <div className="text-2xl font-bold text-red-700">{failed}</div>
-        <div className="text-xs text-red-600">Errores</div>
+      <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-3 text-center">
+        <div className="text-2xl font-bold text-red-700 dark:text-red-400">{failed}</div>
+        <div className="text-xs text-red-600 dark:text-red-500">Errores</div>
       </div>
     </div>
   );
@@ -155,8 +157,8 @@ function FieldWithConf({
         onChange={(e) => onChange(e.target.value)}
         className={cn(
           'h-8 text-sm',
-          confidence !== null && !edited && confidence < 70 && 'border-red-400 bg-red-50',
-          confidence !== null && !edited && confidence >= 70 && confidence < 85 && 'border-amber-400',
+          confidence !== null && !edited && confidence < 70 && 'border-red-400 bg-red-50 dark:bg-red-950/30',
+          confidence !== null && !edited && confidence >= 70 && confidence < 85 && 'border-amber-400 dark:border-amber-600',
         )}
       />
     </div>
@@ -194,6 +196,7 @@ export default function RemitorDetailPage() {
   const [overrideReason, setOverrideReason] = useState('');
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const docQuery = useQuery({
     queryKey: ['document', id],
@@ -232,6 +235,49 @@ export default function RemitorDetailPage() {
     },
   });
 
+  const isReady = !docQuery.isLoading && !docQuery.isError && !!docQuery.data;
+  const isPendingDoc = isReady && docQuery.data?.status === 'review_needed';
+  const canApproveShortcut = validationsQuery.data?.summary.canApprove ?? true;
+
+  useKeyboardShortcuts(
+    [
+      {
+        key: 'Enter',
+        description: 'Aprobar documento',
+        handler: () => {
+          if (isPendingDoc && canApproveShortcut) approveMutation.mutate();
+        },
+      },
+      {
+        key: 'Escape',
+        description: 'Volver al listado',
+        handler: () => router.push('/remitos'),
+      },
+      {
+        key: 's',
+        ctrlKey: true,
+        allowInInput: true,
+        description: 'Guardar borrador',
+        handler: () => {},
+      },
+      {
+        key: 'Enter',
+        ctrlKey: true,
+        allowInInput: true,
+        description: 'Aprobar desde cualquier input',
+        handler: () => {
+          if (isPendingDoc && canApproveShortcut) approveMutation.mutate();
+        },
+      },
+      {
+        key: '?',
+        description: 'Ayuda de atajos',
+        handler: () => setHelpOpen(true),
+      },
+    ],
+    true,
+  );
+
   function handleFieldChange(field: string, value: string) {
     setEditedFields((prev) => new Set(prev).add(field));
     setFieldValues((prev) => ({ ...prev, [field]: value }));
@@ -245,8 +291,24 @@ export default function RemitorDetailPage() {
 
   if (docQuery.isLoading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="space-y-4 p-6">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-9 w-9 rounded-lg" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-6 w-64" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-5">
+          <div className="lg:col-span-3">
+            <Skeleton className="h-[60vh] w-full rounded-lg" />
+          </div>
+          <div className="lg:col-span-2 space-y-4">
+            <Skeleton className="h-20 w-full rounded-lg" />
+            <Skeleton className="h-48 w-full rounded-lg" />
+            <Skeleton className="h-32 w-full rounded-lg" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -342,16 +404,16 @@ export default function RemitorDetailPage() {
 
             {/* Duplicate alert */}
             {duplicateId && (
-              <div className="flex items-start gap-3 rounded-lg border border-red-300 bg-red-50 p-4">
+              <div className="flex items-start gap-3 rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4">
                 <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-red-800">Posible duplicado detectado</p>
-                  <p className="text-sm text-red-700">
+                  <p className="text-sm font-semibold text-red-800 dark:text-red-300">Posible duplicado detectado</p>
+                  <p className="text-sm text-red-700 dark:text-red-400">
                     Ya existe un comprobante con el mismo proveedor y número.
                   </p>
                   <Link
                     href={`/remitos/${duplicateId}`}
-                    className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-red-700 underline underline-offset-2"
+                    className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-red-700 dark:text-red-400 underline underline-offset-2"
                   >
                     Ver comprobante existente
                     <ExternalLink className="h-3 w-3" />
@@ -512,6 +574,14 @@ export default function RemitorDetailPage() {
             )}
           </div>
         </div>
+
+        {/* Keyboard shortcuts footer */}
+        <div className="flex items-center gap-4 text-xs text-muted-foreground border-t pt-3 mt-2">
+          <span><kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">Enter</kbd> aprobar</span>
+          <span><kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">Esc</kbd> cerrar</span>
+          <span><kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">Ctrl+S</kbd> guardar</span>
+          <span><kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">?</kbd> ayuda</span>
+        </div>
       </div>
 
       {/* Override dialog */}
@@ -589,6 +659,29 @@ export default function RemitorDetailPage() {
               Confirmar rechazo
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Keyboard shortcuts help dialog */}
+      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Atajos de teclado</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            {[
+              { keys: 'Enter', desc: 'Aprobar documento (fuera de inputs)' },
+              { keys: 'Ctrl+Enter', desc: 'Aprobar desde cualquier campo' },
+              { keys: 'Esc', desc: 'Volver al listado' },
+              { keys: 'Ctrl+S', desc: 'Guardar borrador (próximamente)' },
+              { keys: '?', desc: 'Esta pantalla de ayuda' },
+            ].map(({ keys, desc }) => (
+              <div key={keys} className="flex items-center justify-between gap-4">
+                <kbd className="rounded bg-muted px-2 py-1 font-mono text-xs">{keys}</kbd>
+                <span className="text-muted-foreground flex-1">{desc}</span>
+              </div>
+            ))}
+          </div>
         </DialogContent>
       </Dialog>
     </>

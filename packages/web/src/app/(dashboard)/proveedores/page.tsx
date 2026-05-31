@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ProveedorForm } from '@/components/features/proveedores/ProveedorForm';
 import { useDebounce } from '@/hooks/useDebounce';
+import { Truck, Search } from 'lucide-react';
 
 const columns: ColumnDef<Proveedor>[] = [
   { accessorKey: 'name', header: 'Razón social' },
@@ -48,8 +49,25 @@ export default function ProveedoresPage() {
         columns={columns}
         data={data?.items ?? []}
         isLoading={isLoading}
-        emptyMessage="No hay proveedores."
         onRowClick={(p) => { setEditing(p); setFormOpen(true); }}
+        emptyContent={
+          debouncedSearch ? (
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <Search className="h-10 w-10 text-muted-foreground/50" />
+              <p className="text-sm font-medium">Sin resultados</p>
+              <p className="text-xs text-muted-foreground">No encontramos proveedores con esos términos.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <Truck className="h-10 w-10 text-muted-foreground/50" />
+              <p className="text-sm font-medium">Sin proveedores</p>
+              <p className="text-xs text-muted-foreground">Agregá tu primer proveedor.</p>
+              <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }}>
+                Nuevo proveedor
+              </Button>
+            </div>
+          )
+        }
       />
 
       {data && data.totalPages > 1 && (

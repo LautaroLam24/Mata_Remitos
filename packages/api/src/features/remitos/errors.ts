@@ -49,3 +49,20 @@ export class DocumentNotFoundError extends DomainError {
     super(`Document ${id} not found`, 'DOCUMENT_NOT_FOUND', 404, { id });
   }
 }
+
+export class DocumentItemNotFoundError extends DomainError {
+  constructor(id: string) {
+    super(`Ítem ${id} no encontrado`, 'DOCUMENT_ITEM_NOT_FOUND', 404, { id });
+  }
+}
+
+export class UnresolvedItemsError extends DomainError {
+  constructor(count: number) {
+    super(
+      `Tenés ${count} ítem${count === 1 ? '' : 's'} sin asignar. Resolvé todos antes de confirmar.`,
+      'UNRESOLVED_ITEMS',
+      422,
+      { count },
+    );
+  }
+}

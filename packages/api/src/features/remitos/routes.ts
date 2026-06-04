@@ -3,7 +3,16 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { db } from '../../infrastructure/db.js';
 import { uploadDocument } from './service.js';
-import { getReviewQueue, getDocumentDetail, approveDocument, rejectDocument } from './review-service.js';
+import {
+  getReviewQueue,
+  getDocumentDetail,
+  approveDocument,
+  rejectDocument,
+  updateDocumentItem,
+  createProductFromItem,
+  associateItemToProduct,
+  createAllUnmatchedProducts,
+} from './review-service.js';
 import { getDocumentQueue } from '../../infrastructure/queue.js';
 import {
   uploadResponseSchema,
@@ -14,6 +23,12 @@ import {
   rejectResponseSchema,
   documentListQuerySchema,
   documentListResponseSchema,
+  documentItemSchema,
+  updateItemBodySchema,
+  createProductFromItemBodySchema,
+  associateProductBodySchema,
+  createProductFromItemResponseSchema,
+  createAllUnmatchedResponseSchema,
 } from './schemas.js';
 import { ValidationError } from '../../shared/errors.js';
 import { exportToExcel, exportToCsv } from './export-service.js';
@@ -248,6 +263,146 @@ export const remitoRoutes: FastifyPluginAsync = async (app) => {
       const { id } = req.params;
       const result = await runValidations({ id, tenantId: req.tenant.id });
       return reply.send(result);
+    },
+  );
+
+  // ─── Item: bulk create all unmatched ─────────────────────────────────────────
+  // DEBE ir antes de /:id/items/:itemId para que Fastify no capture "create-all-unmatched" como :itemId
+
+  r.post(
+    '/:id/items/create-all-unmatched',
+    {
+      schema: {
+        params: z.object({ id: z.string() }),
+        response: { 200: createAllUnmatchedResponseSchema },
+      },
+      preHandler: [app.authenticate, app.requireTenant],
+    },
+    async (req, reply) => {
+      const { id } = req.params;
+      const result = await createAllUnmatchedProducts({
+        documentId: id,
+        tenantId: req.tenant.id,
+        userId: req.user.sub,
+        db,
+      });
+      return reply.send({
+        ...result,
+        items: result.items.map((item) => ({
+          ...item,
+          quantity: Number(item.quantity),
+          unitPrice: item.unitPrice !== null ? Number(item.unitPrice) : null,
+        })),
+      });
+    },
+  );
+
+  // ─── Item: PATCH campos editables ────────────────────────────────────────────
+
+  r.patch(
+    '/:id/items/:itemId',
+    {
+      schema: {
+        params: z.object({ id: z.string(), itemId: z.string() }),
+        body: updateItemBodySchema,
+        response: { 200: documentItemSchema },
+      },
+      preHandler: [app.authenticate, app.requireTenant],
+    },
+    async (req, reply) => {
+      const { id, itemId } = req.params;
+      const { rawDescription, quantity, unitPrice } = req.body;
+      // exactOptionalPropertyTypes: usar spread condicional para evitar pasar undefined explícito
+      const updates = {
+        ...(rawDescription !== undefined ? { rawDescription } : {}),
+        ...(quantity !== undefined ? { quantity } : {}),
+        ...(unitPrice !== undefined ? { unitPrice } : {}),
+      };
+      const updated = await updateDocumentItem({
+        documentId: id,
+        itemId,
+        tenantId: req.tenant.id,
+        userId: req.user.sub,
+        updates,
+        db,
+      });
+      return reply.send({
+        ...updated,
+        quantity: Number(updated.quantity),
+        unitPrice: updated.unitPrice !== null ? Number(updated.unitPrice) : null,
+      });
+    },
+  );
+
+  // ─── Item: crear producto desde ítem ─────────────────────────────────────────
+
+  r.post(
+    '/:id/items/:itemId/create-product',
+    {
+      schema: {
+        params: z.object({ id: z.string(), itemId: z.string() }),
+        body: createProductFromItemBodySchema,
+        response: { 201: createProductFromItemResponseSchema },
+      },
+      preHandler: [app.authenticate, app.requireTenant],
+    },
+    async (req, reply) => {
+      const { id, itemId } = req.params;
+      const { code, name, unit, minStock } = req.body;
+      // exactOptionalPropertyTypes: pasar minStock solo si no es undefined
+      const productData = {
+        code,
+        name,
+        unit,
+        ...(minStock !== undefined ? { minStock } : {}),
+      };
+      const result = await createProductFromItem({
+        documentId: id,
+        itemId,
+        tenantId: req.tenant.id,
+        userId: req.user.sub,
+        productData,
+        db,
+      });
+      return reply.code(201).send({
+        productId: result.productId,
+        item: {
+          ...result.item,
+          quantity: Number(result.item.quantity),
+          unitPrice: result.item.unitPrice !== null ? Number(result.item.unitPrice) : null,
+        },
+      });
+    },
+  );
+
+  // ─── Item: asociar a producto existente ──────────────────────────────────────
+
+  r.post(
+    '/:id/items/:itemId/associate-product',
+    {
+      schema: {
+        params: z.object({ id: z.string(), itemId: z.string() }),
+        body: associateProductBodySchema,
+        response: { 200: documentItemSchema },
+      },
+      preHandler: [app.authenticate, app.requireTenant],
+    },
+    async (req, reply) => {
+      const { id, itemId } = req.params;
+      const { productId } = req.body;
+      const updated = await associateItemToProduct({
+        documentId: id,
+        itemId,
+        tenantId: req.tenant.id,
+        userId: req.user.sub,
+        productId,
+        db,
+      });
+      return reply.send({
+        ...updated,
+        quantity: Number(updated.quantity),
+        unitPrice: updated.unitPrice !== null ? Number(updated.unitPrice) : null,
+      });
     },
   );
 

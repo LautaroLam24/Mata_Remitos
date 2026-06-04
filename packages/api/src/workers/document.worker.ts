@@ -96,7 +96,7 @@ async function processDocument(
           unit: item.unit.value,
           unitPrice: item.unitPrice.value ?? null,
           confidenceScore: item.quantity.confidence,
-          matchStatus: match ? 'matched' : 'new_product',
+          matchStatus: match ? 'matched' : 'pending',
           matchScore: match?.score ?? null,
           ...(match ? { productId: match.productId } : {}),
         },

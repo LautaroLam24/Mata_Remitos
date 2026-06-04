@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +12,10 @@ import {
   Loader2,
   ShieldAlert,
   ExternalLink,
+  Plus,
+  Link2,
+  PackagePlus,
+  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,7 +33,14 @@ import {
 import { ConfidenceBadge } from '@/components/features/ConfidenceBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import { api, type ValidationCheck, type RawExtraction, type ApiError } from '@/lib/api';
+import {
+  api,
+  type DocumentItem,
+  type DocumentDetail,
+  type ValidationCheck,
+  type RawExtraction,
+  type ApiError,
+} from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
@@ -170,15 +181,275 @@ function FieldWithConf({
 function MatchBadge({ status }: { status: string }) {
   if (status === 'matched') {
     return (
-      <span className="inline-block rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">
+      <span className="inline-block rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700 dark:bg-green-900/40 dark:text-green-400">
         ✓ En catálogo
       </span>
     );
   }
+  if (status === 'new_product') {
+    return (
+      <span className="inline-block rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700 dark:bg-blue-900/40 dark:text-blue-400">
+        + Nuevo producto
+      </span>
+    );
+  }
   return (
-    <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-      Sin match
+    <span className="inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+      Sin asignar
     </span>
+  );
+}
+
+// ─── Item Row ─────────────────────────────────────────────────────────────────
+
+type ItemEdits = { rawDescription: string; quantity: string; unitPrice: string };
+
+interface ItemRowProps {
+  item: DocumentItem;
+  docId: string;
+  isPending: boolean;
+  onItemUpdated: (item: DocumentItem) => void;
+  onOpenAssociate: (itemId: string) => void;
+}
+
+function ItemRow({ item, docId, isPending, onItemUpdated, onOpenAssociate }: ItemRowProps) {
+  const [edits, setEdits] = useState<ItemEdits>({
+    rawDescription: item.rawDescription,
+    quantity: String(item.quantity),
+    unitPrice: item.unitPrice !== null ? String(item.unitPrice) : '',
+  });
+  const [fieldError, setFieldError] = useState<string | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [createData, setCreateData] = useState({
+    code: `AUTO-${item.id.slice(-8).toUpperCase()}`,
+    name: item.rawDescription,
+    unit: item.unit,
+  });
+
+  const prevItemRef = useRef(item);
+  // Sincronizar edits si el ítem cambia desde fuera (ej: después de associate)
+  if (prevItemRef.current.id !== item.id || prevItemRef.current.matchStatus !== item.matchStatus) {
+    prevItemRef.current = item;
+    setEdits({
+      rawDescription: item.rawDescription,
+      quantity: String(item.quantity),
+      unitPrice: item.unitPrice !== null ? String(item.unitPrice) : '',
+    });
+  }
+
+  const updateMutation = useMutation({
+    mutationFn: (updates: { rawDescription?: string; quantity?: number; unitPrice?: number }) =>
+      api.remitos.updateItem(docId, item.id, updates),
+    onSuccess: onItemUpdated,
+    onError: () => setFieldError('Error al guardar el cambio.'),
+  });
+
+  const createProductMutation = useMutation({
+    mutationFn: () =>
+      api.remitos.createProductFromItem(docId, item.id, {
+        code: createData.code,
+        name: createData.name,
+        unit: createData.unit,
+      }),
+    onSuccess: ({ item: updated }) => {
+      setShowCreateForm(false);
+      onItemUpdated(updated);
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Error al crear el producto';
+      setFieldError(msg);
+    },
+  });
+
+  function handleBlur(field: 'rawDescription' | 'quantity' | 'unitPrice') {
+    setFieldError(null);
+    const val = edits[field];
+
+    if (field === 'quantity') {
+      const n = parseFloat(val);
+      if (isNaN(n) || n <= 0) {
+        setFieldError('Cantidad debe ser mayor a 0');
+        setEdits((p) => ({ ...p, quantity: String(item.quantity) }));
+        return;
+      }
+      if (n !== item.quantity) updateMutation.mutate({ quantity: n });
+    } else if (field === 'unitPrice') {
+      if (val === '') {
+        // sin precio — no hay cambio si ya era null
+        if (item.unitPrice !== null) updateMutation.mutate({ unitPrice: 0 });
+      } else {
+        const n = parseFloat(val);
+        if (isNaN(n) || n < 0) {
+          setFieldError('Precio debe ser mayor o igual a 0');
+          setEdits((p) => ({ ...p, unitPrice: item.unitPrice !== null ? String(item.unitPrice) : '' }));
+          return;
+        }
+        if (n !== item.unitPrice) updateMutation.mutate({ unitPrice: n });
+      }
+    } else if (field === 'rawDescription') {
+      const trimmed = val.trim();
+      if (!trimmed) {
+        setFieldError('La descripción no puede estar vacía');
+        setEdits((p) => ({ ...p, rawDescription: item.rawDescription }));
+        return;
+      }
+      if (trimmed !== item.rawDescription) updateMutation.mutate({ rawDescription: trimmed });
+    }
+  }
+
+  const isSaving = updateMutation.isPending;
+
+  return (
+    <div className="space-y-2">
+      {/* Fila principal */}
+      <div className="flex items-start gap-2">
+        {/* Descripción */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1 mb-0.5">
+            {item.confidenceScore !== null && (
+              <ConfidenceBadge confidence={item.confidenceScore} edited={item.humanEdited} />
+            )}
+            {isSaving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+          </div>
+          <Input
+            value={edits.rawDescription}
+            onChange={(e) => setEdits((p) => ({ ...p, rawDescription: e.target.value }))}
+            onBlur={() => handleBlur('rawDescription')}
+            disabled={!isPending}
+            className="h-7 text-xs"
+            placeholder="Descripción"
+          />
+        </div>
+
+        {/* Cantidad */}
+        <div className="w-20">
+          <div className="mb-0.5 text-[10px] text-muted-foreground">Cant.</div>
+          <Input
+            value={edits.quantity}
+            onChange={(e) => setEdits((p) => ({ ...p, quantity: e.target.value }))}
+            onBlur={() => handleBlur('quantity')}
+            disabled={!isPending}
+            className="h-7 text-xs text-right"
+            type="number"
+            min="0"
+            step="any"
+          />
+        </div>
+
+        {/* Precio */}
+        <div className="w-24">
+          <div className="mb-0.5 text-[10px] text-muted-foreground">Precio u.</div>
+          <Input
+            value={edits.unitPrice}
+            onChange={(e) => setEdits((p) => ({ ...p, unitPrice: e.target.value }))}
+            onBlur={() => handleBlur('unitPrice')}
+            disabled={!isPending}
+            className="h-7 text-xs text-right"
+            type="number"
+            min="0"
+            step="any"
+            placeholder="—"
+          />
+        </div>
+
+        {/* Badge */}
+        <div className="pt-5 shrink-0">
+          <MatchBadge status={item.matchStatus} />
+        </div>
+      </div>
+
+      {/* Error inline */}
+      {fieldError && <p className="text-xs text-destructive">{fieldError}</p>}
+
+      {/* Acciones para ítems sin asignar (solo en modo revisión) */}
+      {isPending && item.matchStatus === 'pending' && (
+        <div className="flex gap-1.5 ml-0">
+          {!showCreateForm ? (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 text-xs px-2 gap-1 border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400"
+                onClick={() => setShowCreateForm(true)}
+              >
+                <Plus className="h-3 w-3" />
+                Crear producto
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 text-xs px-2 gap-1"
+                onClick={() => onOpenAssociate(item.id)}
+              >
+                <Link2 className="h-3 w-3" />
+                Asociar
+              </Button>
+            </>
+          ) : (
+            <div className="w-full rounded-md border bg-muted/30 p-2 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Nuevo producto</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Código</label>
+                  <Input
+                    value={createData.code}
+                    onChange={(e) => setCreateData((p) => ({ ...p, code: e.target.value }))}
+                    className="h-6 text-xs"
+                    placeholder="COD001"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-[10px] text-muted-foreground">Nombre</label>
+                  <Input
+                    value={createData.name}
+                    onChange={(e) => setCreateData((p) => ({ ...p, name: e.target.value }))}
+                    className="h-6 text-xs"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Unidad</label>
+                  <Input
+                    value={createData.unit}
+                    onChange={(e) => setCreateData((p) => ({ ...p, unit: e.target.value }))}
+                    className="h-6 text-xs"
+                    placeholder="un"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-1.5">
+                <Button
+                  size="sm"
+                  className="h-6 text-xs px-2"
+                  disabled={!createData.code.trim() || !createData.name.trim() || !createData.unit.trim() || createProductMutation.isPending}
+                  onClick={() => createProductMutation.mutate()}
+                >
+                  {createProductMutation.isPending ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    'Crear'
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 text-xs px-2"
+                  onClick={() => setShowCreateForm(false)}
+                >
+                  Cancelar
+                </Button>
+              </div>
+              {createProductMutation.isError && (
+                <p className="text-xs text-destructive">
+                  {(createProductMutation.error as ApiError | null)?.message ?? 'Error al crear'}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -197,6 +468,10 @@ export default function RemitorDetailPage() {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
+
+  // Estado para el diálogo de "Asociar a producto existente"
+  const [associateItemId, setAssociateItemId] = useState<string | null>(null);
+  const [productSearchTerm, setProductSearchTerm] = useState('');
 
   const docQuery = useQuery({
     queryKey: ['document', id],
@@ -234,6 +509,51 @@ export default function RemitorDetailPage() {
       router.push('/remitos');
     },
   });
+
+  // Búsqueda de productos para el diálogo de "Asociar"
+  const productSearchQuery = useQuery({
+    queryKey: ['productos', 'search', productSearchTerm],
+    queryFn: () => api.productos.list({ search: productSearchTerm, page: 1 }),
+    enabled: associateItemId !== null,
+  });
+
+  const associateMutation = useMutation({
+    mutationFn: ({ itemId, productId }: { itemId: string; productId: string }) =>
+      api.remitos.associateItemToProduct(id, itemId, productId),
+    onSuccess: (updatedItem) => {
+      setAssociateItemId(null);
+      setProductSearchTerm('');
+      updateItemInCache(updatedItem);
+      void qc.invalidateQueries({ queryKey: ['validations', id] });
+    },
+  });
+
+  const createAllMutation = useMutation({
+    mutationFn: () => api.remitos.createAllUnmatched(id),
+    onSuccess: ({ items }) => {
+      qc.setQueryData(['document', id], (old: DocumentDetail | undefined) => {
+        if (!old) return old;
+        const updatedMap = new Map(items.map((i) => [i.id, i]));
+        return {
+          ...old,
+          items: old.items.map((i) => updatedMap.get(i.id) ?? i),
+        };
+      });
+      void qc.invalidateQueries({ queryKey: ['validations', id] });
+    },
+  });
+
+  // Helper: actualizar un ítem en la cache sin re-fetch completo
+  function updateItemInCache(updatedItem: DocumentItem) {
+    qc.setQueryData(['document', id], (old: DocumentDetail | undefined) => {
+      if (!old) return old;
+      return {
+        ...old,
+        items: old.items.map((i) => (i.id === updatedItem.id ? updatedItem : i)),
+      };
+    });
+    void qc.invalidateQueries({ queryKey: ['validations', id] });
+  }
 
   const isReady = !docQuery.isLoading && !docQuery.isError && !!docQuery.data;
   const isPendingDoc = isReady && docQuery.data?.status === 'review_needed';
@@ -329,7 +649,8 @@ export default function RemitorDetailPage() {
   const validations = validationsQuery.data;
   const raw = doc.rawExtraction;
   const isPending = doc.status === 'review_needed';
-  const canApprove = validations?.summary.canApprove ?? true;
+  const unresolvedCount = doc.items.filter((i) => i.matchStatus === 'pending').length;
+  const canApprove = (validations?.summary.canApprove ?? true) && unresolvedCount === 0;
   const duplicateId = validations?.summary.duplicateId;
   const actionsPending =
     approveMutation.isPending || overrideMutation.isPending || rejectMutation.isPending;
@@ -489,40 +810,52 @@ export default function RemitorDetailPage() {
             {/* Items */}
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">
-                  Productos ({doc.items.length})
-                </CardTitle>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-sm">
+                    Productos ({doc.items.length})
+                    {unresolvedCount > 0 && isPending && (
+                      <span className="ml-2 text-xs font-normal text-amber-600">
+                        {unresolvedCount} sin asignar
+                      </span>
+                    )}
+                  </CardTitle>
+                  {isPending && unresolvedCount > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-xs px-2 gap-1 shrink-0"
+                      disabled={createAllMutation.isPending}
+                      onClick={() => createAllMutation.mutate()}
+                      title="Crear un producto nuevo por cada ítem sin asignar"
+                    >
+                      {createAllMutation.isPending ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <PackagePlus className="h-3 w-3" />
+                      )}
+                      Crear todos
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                {doc.items.map((item, idx) => {
-                  const itemConf = item.confidenceScore;
-                  return (
-                    <div key={item.id} className="space-y-1.5">
-                      {idx > 0 && <div className="border-t pt-1" />}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-medium truncate">
-                              {item.rawDescription}
-                            </span>
-                            {itemConf !== null && (
-                              <ConfidenceBadge confidence={itemConf} />
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                            <span>
-                              {item.quantity} {item.unit}
-                            </span>
-                            {item.unitPrice !== null && (
-                              <span>${item.unitPrice.toFixed(2)} c/u</span>
-                            )}
-                          </div>
-                        </div>
-                        <MatchBadge status={item.matchStatus} />
-                      </div>
-                    </div>
-                  );
-                })}
+                {doc.items.map((item, idx) => (
+                  <div key={item.id}>
+                    {idx > 0 && <div className="border-t mb-3" />}
+                    <ItemRow
+                      item={item}
+                      docId={id}
+                      isPending={isPending}
+                      onItemUpdated={(updated) => {
+                        updateItemInCache(updated);
+                      }}
+                      onOpenAssociate={(itemId) => {
+                        setAssociateItemId(itemId);
+                        setProductSearchTerm('');
+                      }}
+                    />
+                  </div>
+                ))}
               </CardContent>
             </Card>
 
@@ -557,7 +890,12 @@ export default function RemitorDetailPage() {
                     Validar y aprobar
                   </Button>
                 </div>
-                {!canApprove && (
+                {unresolvedCount > 0 && (
+                  <p className="text-center text-xs text-amber-600 font-medium">
+                    Tenés {unresolvedCount} ítem{unresolvedCount === 1 ? '' : 's'} sin asignar — resolvé todos antes de confirmar.
+                  </p>
+                )}
+                {unresolvedCount === 0 && !canApprove && (
                   <button
                     className="w-full text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
                     onClick={() => setOverrideOpen(true)}
@@ -657,6 +995,82 @@ export default function RemitorDetailPage() {
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
               Confirmar rechazo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Associate product dialog */}
+      <Dialog
+        open={associateItemId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAssociateItemId(null);
+            setProductSearchTerm('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="h-4 w-4" />
+              Asociar a producto existente
+            </DialogTitle>
+            <DialogDescription>
+              Buscá el producto del catálogo. Al asociarlo se guardará el alias para que la próxima vez matchee solo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-7 h-8 text-sm"
+                placeholder="Buscar por nombre o código..."
+                value={productSearchTerm}
+                onChange={(e) => setProductSearchTerm(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="max-h-60 overflow-y-auto space-y-1 rounded-md border p-1">
+              {productSearchQuery.isLoading && (
+                <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Buscando...
+                </div>
+              )}
+              {!productSearchQuery.isLoading && (productSearchQuery.data?.items ?? []).length === 0 && (
+                <p className="p-4 text-center text-sm text-muted-foreground">
+                  {productSearchTerm ? 'No se encontraron productos' : 'Escribí para buscar'}
+                </p>
+              )}
+              {(productSearchQuery.data?.items ?? []).map((product) => (
+                <button
+                  key={product.id}
+                  className="w-full flex items-start gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
+                  disabled={associateMutation.isPending}
+                  onClick={() => {
+                    if (associateItemId) {
+                      associateMutation.mutate({ itemId: associateItemId, productId: product.id });
+                    }
+                  }}
+                >
+                  <span className="font-mono text-xs text-muted-foreground shrink-0 pt-0.5">{product.code}</span>
+                  <span className="flex-1 min-w-0 truncate">{product.name}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {Number(product.stockOnHand).toFixed(0)} {product.unit}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {associateMutation.isError && (
+              <p className="text-xs text-destructive">
+                {(associateMutation.error as ApiError | null)?.message ?? 'Error al asociar'}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAssociateItemId(null); setProductSearchTerm(''); }}>
+              Cancelar
             </Button>
           </DialogFooter>
         </DialogContent>

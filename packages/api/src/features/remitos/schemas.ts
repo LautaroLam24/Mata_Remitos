@@ -39,7 +39,7 @@ export const reviewQueueResponseSchema = z.object({
 
 // ─── Document detail ──────────────────────────────────────────────────────────
 
-const documentItemSchema = z.object({
+export const documentItemSchema = z.object({
   id: z.string(),
   tenantId: z.string(),
   documentId: z.string(),
@@ -51,6 +51,7 @@ const documentItemSchema = z.object({
   confidenceScore: z.number().nullable(),
   matchScore: z.number().nullable(),
   matchStatus: z.string(),
+  humanEdited: z.boolean(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -150,4 +151,33 @@ export const approveResponseSchema = z.object({
 export const rejectResponseSchema = z.object({
   id: z.string(),
   status: z.literal('rejected'),
+});
+
+// ─── Item resolution — nuevos endpoints ──────────────────────────────────────
+
+export const updateItemBodySchema = z.object({
+  rawDescription: z.string().min(1).optional(),
+  quantity: z.number().positive().optional(),
+  unitPrice: z.number().min(0).optional(),
+});
+
+export const createProductFromItemBodySchema = z.object({
+  code: z.string().min(1),
+  name: z.string().min(1),
+  unit: z.string().min(1),
+  minStock: z.number().min(0).nullable().optional(),
+});
+
+export const associateProductBodySchema = z.object({
+  productId: z.string().min(1),
+});
+
+export const createAllUnmatchedResponseSchema = z.object({
+  created: z.number(),
+  items: z.array(documentItemSchema),
+});
+
+export const createProductFromItemResponseSchema = z.object({
+  productId: z.string(),
+  item: documentItemSchema,
 });

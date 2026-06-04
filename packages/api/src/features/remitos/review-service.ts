@@ -1,8 +1,13 @@
 import type { PrismaClient } from '@prisma/client';
 import { Prisma } from '@prisma/client';
-import { DocumentNotFoundError } from './errors.js';
-import { ConflictError } from '../../shared/errors.js';
+import {
+  DocumentNotFoundError,
+  DocumentItemNotFoundError,
+  UnresolvedItemsError,
+} from './errors.js';
+import { ConflictError, NotFoundError } from '../../shared/errors.js';
 import { enqueueNotification, getUserEmail, getTenantOwnerEmails } from '../notifications/service.js';
+import { matchProduct } from './validators/matchProduct.js';
 
 export type ReviewQueueItem = {
   id: string;
@@ -38,6 +43,7 @@ export type DocumentItem = {
   confidenceScore: number | null;
   matchScore: number | null;
   matchStatus: string;
+  humanEdited: boolean;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -155,11 +161,23 @@ export async function approveDocument(params: {
     );
   }
 
+  // Bloquear si hay ítems sin resolver (pending) o en estado inválido (new_product sin productId)
+  const unresolvedItems = doc.items.filter(
+    (i) =>
+      !i.deletedAt &&
+      (i.matchStatus === 'pending' ||
+        (i.matchStatus === 'new_product' && i.productId === null)),
+  );
+  if (unresolvedItems.length > 0) {
+    throw new UnresolvedItemsError(unresolvedItems.length);
+  }
+
   let movementsCreated = 0;
 
   await db.$transaction(async (tx) => {
     for (const item of doc.items) {
-      if (item.matchStatus !== 'matched' || !item.productId) continue;
+      // Solo procesar ítems con productId asignado (matched o new_product)
+      if (!item.productId || (item.matchStatus !== 'matched' && item.matchStatus !== 'new_product')) continue;
 
       const product = await tx.product.findUnique({
         where: { id: item.productId },
@@ -269,6 +287,291 @@ export async function approveDocument(params: {
   }
 
   return { id, status: 'approved', movementsCreated };
+}
+
+// ─── Item resolution ──────────────────────────────────────────────────────────
+
+export async function updateDocumentItem(params: {
+  documentId: string;
+  itemId: string;
+  tenantId: string;
+  userId: string;
+  updates: { rawDescription?: string; quantity?: number; unitPrice?: number };
+  db: PrismaClient;
+}): Promise<DocumentItem> {
+  const { documentId, itemId, tenantId, userId, updates, db } = params;
+
+  await db.document.findFirst({ where: { id: documentId, tenantId, deletedAt: null } }).then((d) => {
+    if (!d) throw new DocumentNotFoundError(documentId);
+  });
+
+  const item = await db.documentItem.findFirst({
+    where: { id: itemId, documentId, tenantId, deletedAt: null },
+  });
+  if (!item) throw new DocumentItemNotFoundError(itemId);
+
+  const before: Record<string, string | number | boolean | null> = {};
+  const after: Record<string, string | number | boolean | null> = {};
+
+  type UpdateData = {
+    humanEdited: boolean;
+    rawDescription?: string;
+    productId?: string | null;
+    matchScore?: number | null;
+    matchStatus?: string;
+    quantity?: Prisma.Decimal;
+    confidenceScore?: number;
+    unitPrice?: Prisma.Decimal | null;
+  };
+
+  const updateData: UpdateData = { humanEdited: true };
+
+  if (updates.rawDescription !== undefined) {
+    before['rawDescription'] = item.rawDescription;
+    after['rawDescription'] = updates.rawDescription;
+    updateData.rawDescription = updates.rawDescription;
+
+    // Re-correr el match solo si el ítem no fue resuelto manualmente
+    if (item.matchStatus !== 'new_product') {
+      const rawCatalog = await db.product.findMany({
+        where: { tenantId, deletedAt: null },
+        select: { id: true, name: true, code: true, aliases: true, typicalRange: true },
+      });
+      const catalog = rawCatalog.map((p) => ({
+        ...p,
+        typicalRange: (p.typicalRange as { min: number; max: number } | null) ?? null,
+      }));
+      const match = matchProduct(updates.rawDescription, catalog);
+      if (match) {
+        updateData.productId = match.productId;
+        updateData.matchScore = match.score;
+        updateData.matchStatus = 'matched';
+      } else {
+        // Solo volver a pending si no estaba ya asociado manualmente
+        if (item.matchStatus !== 'matched') {
+          updateData.productId = null;
+          updateData.matchScore = null;
+          updateData.matchStatus = 'pending';
+        }
+      }
+    }
+  }
+
+  if (updates.quantity !== undefined) {
+    before['quantity'] = Number(item.quantity);
+    after['quantity'] = updates.quantity;
+    updateData.quantity = new Prisma.Decimal(updates.quantity);
+    updateData.confidenceScore = 100;
+  }
+
+  if (updates.unitPrice !== undefined) {
+    before['unitPrice'] = item.unitPrice !== null ? Number(item.unitPrice) : null;
+    after['unitPrice'] = updates.unitPrice;
+    updateData.unitPrice = new Prisma.Decimal(updates.unitPrice);
+  }
+
+  const updated = await db.$transaction(async (tx) => {
+    const result = await tx.documentItem.update({ where: { id: itemId }, data: updateData });
+    await tx.auditLog.create({
+      data: {
+        tenantId,
+        userId,
+        entityType: 'DocumentItem',
+        entityId: itemId,
+        action: 'update',
+        changes: { before, after, documentId },
+      },
+    });
+    return result;
+  });
+
+  return updated as DocumentItem;
+}
+
+export async function createProductFromItem(params: {
+  documentId: string;
+  itemId: string;
+  tenantId: string;
+  userId: string;
+  productData: { code: string; name: string; unit: string; minStock?: number | null };
+  db: PrismaClient;
+}): Promise<{ productId: string; item: DocumentItem }> {
+  const { documentId, itemId, tenantId, userId, productData, db } = params;
+
+  const item = await db.documentItem.findFirst({
+    where: { id: itemId, documentId, tenantId, deletedAt: null },
+  });
+  if (!item) throw new DocumentItemNotFoundError(itemId);
+
+  const result = await db.$transaction(async (tx) => {
+    const created = await tx.product.create({
+      data: {
+        tenantId,
+        code: productData.code,
+        name: productData.name,
+        unit: productData.unit,
+        stockOnHand: new Prisma.Decimal(0),
+        aliases: [item.rawDescription],
+        ...(productData.minStock != null ? { minStock: new Prisma.Decimal(productData.minStock) } : {}),
+      },
+    });
+
+    const updatedItem = await tx.documentItem.update({
+      where: { id: itemId },
+      data: { productId: created.id, matchStatus: 'new_product', matchScore: 100 },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        tenantId,
+        userId,
+        entityType: 'Product',
+        entityId: created.id,
+        action: 'create',
+        changes: {
+          after: { code: productData.code, name: productData.name, unit: productData.unit },
+          documentId,
+          itemId,
+        },
+      },
+    });
+
+    return { productId: created.id, item: updatedItem as DocumentItem };
+  });
+
+  return result;
+}
+
+export async function associateItemToProduct(params: {
+  documentId: string;
+  itemId: string;
+  tenantId: string;
+  userId: string;
+  productId: string;
+  db: PrismaClient;
+}): Promise<DocumentItem> {
+  const { documentId, itemId, tenantId, userId, productId, db } = params;
+
+  const product = await db.product.findFirst({
+    where: { id: productId, tenantId, deletedAt: null },
+    select: { id: true, aliases: true },
+  });
+  if (!product) throw new NotFoundError('Product', productId);
+
+  const item = await db.documentItem.findFirst({
+    where: { id: itemId, documentId, tenantId, deletedAt: null },
+  });
+  if (!item) throw new DocumentItemNotFoundError(itemId);
+
+  // Guardar alias para que la próxima vez matchee solo
+  const normalizedAlias = item.rawDescription.trim().toLowerCase();
+  const alreadyHasAlias = product.aliases.some((a) => a.trim().toLowerCase() === normalizedAlias);
+
+  const updated = await db.$transaction(async (tx) => {
+    const updatedItem = await tx.documentItem.update({
+      where: { id: itemId },
+      data: { productId, matchStatus: 'matched', matchScore: 100 },
+    });
+
+    if (!alreadyHasAlias) {
+      await tx.product.update({
+        where: { id: productId },
+        data: { aliases: { push: item.rawDescription } },
+      });
+    }
+
+    await tx.auditLog.create({
+      data: {
+        tenantId,
+        userId,
+        entityType: 'DocumentItem',
+        entityId: itemId,
+        action: 'associate',
+        changes: {
+          before: { productId: item.productId, matchStatus: item.matchStatus },
+          after: { productId, matchStatus: 'matched' },
+          aliasAdded: !alreadyHasAlias ? item.rawDescription : null,
+          documentId,
+        },
+      },
+    });
+
+    return updatedItem as DocumentItem;
+  });
+
+  return updated;
+}
+
+export async function createAllUnmatchedProducts(params: {
+  documentId: string;
+  tenantId: string;
+  userId: string;
+  db: PrismaClient;
+}): Promise<{ created: number; items: DocumentItem[] }> {
+  const { documentId, tenantId, userId, db } = params;
+
+  const doc = await db.document.findFirst({
+    where: { id: documentId, tenantId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!doc) throw new DocumentNotFoundError(documentId);
+
+  const pendingItems = await db.documentItem.findMany({
+    where: { documentId, tenantId, matchStatus: 'pending', deletedAt: null },
+  });
+
+  const createdItems: DocumentItem[] = [];
+
+  for (const item of pendingItems) {
+    // Código único garantizado: sufijo del cuid del ítem
+    const code = `AUTO-${item.id.slice(-10).toUpperCase()}`;
+    try {
+      const result = await db.$transaction(async (tx) => {
+        const created = await tx.product.create({
+          data: {
+            tenantId,
+            code,
+            name: item.rawDescription,
+            unit: item.unit,
+            stockOnHand: new Prisma.Decimal(0),
+            aliases: [item.rawDescription],
+          },
+        });
+
+        const updatedItem = await tx.documentItem.update({
+          where: { id: item.id },
+          data: { productId: created.id, matchStatus: 'new_product', matchScore: 100 },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            tenantId,
+            userId,
+            entityType: 'Product',
+            entityId: created.id,
+            action: 'create',
+            changes: {
+              after: { code, name: item.rawDescription, unit: item.unit },
+              documentId,
+              itemId: item.id,
+              source: 'bulk_create',
+            },
+          },
+        });
+
+        return updatedItem as DocumentItem;
+      });
+      createdItems.push(result);
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        // Código ya existe — saltar este ítem (caso extremadamente improbable)
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  return { created: createdItems.length, items: createdItems };
 }
 
 export async function rejectDocument(params: {

@@ -179,8 +179,32 @@ export interface DocumentItem {
   confidenceScore: number | null;
   matchScore: number | null;
   matchStatus: string;
+  humanEdited: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface UpdateItemBody {
+  rawDescription?: string;
+  quantity?: number;
+  unitPrice?: number;
+}
+
+export interface CreateProductFromItemBody {
+  code: string;
+  name: string;
+  unit: string;
+  minStock?: number | null;
+}
+
+export interface CreateProductFromItemResponse {
+  productId: string;
+  item: DocumentItem;
+}
+
+export interface CreateAllUnmatchedResponse {
+  created: number;
+  items: DocumentItem[];
 }
 
 export interface DocumentDetail {
@@ -529,6 +553,29 @@ export const api = {
 
     exportCsv: (p: Omit<DocumentListParams, 'page' | 'limit'> = {}) =>
       requestBlob(`/api/remitos/export/csv?${qs({ status: p.status, supplierId: p.supplierId, dateFrom: p.dateFrom, dateTo: p.dateTo, search: p.search })}`),
+
+    updateItem: (docId: string, itemId: string, body: UpdateItemBody) =>
+      request<DocumentItem>(`/api/remitos/${docId}/items/${itemId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+
+    createProductFromItem: (docId: string, itemId: string, body: CreateProductFromItemBody) =>
+      request<CreateProductFromItemResponse>(`/api/remitos/${docId}/items/${itemId}/create-product`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    associateItemToProduct: (docId: string, itemId: string, productId: string) =>
+      request<DocumentItem>(`/api/remitos/${docId}/items/${itemId}/associate-product`, {
+        method: 'POST',
+        body: JSON.stringify({ productId }),
+      }),
+
+    createAllUnmatched: (docId: string) =>
+      request<CreateAllUnmatchedResponse>(`/api/remitos/${docId}/items/create-all-unmatched`, {
+        method: 'POST',
+      }),
   },
 
   productos: {

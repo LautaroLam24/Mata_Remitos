@@ -148,9 +148,11 @@ export async function runValidations(params: {
     details: duplicate ? `ID del duplicado: ${duplicate.id}` : null,
   });
 
-  // 5. items_matched — proporción de items matcheados al catálogo
+  // 5. items_matched — proporción de items resueltos (matched o new_product)
   const totalItemCount = doc.items.length;
-  const matchedCount = doc.items.filter((i) => i.matchStatus === 'matched').length;
+  const matchedCount = doc.items.filter(
+    (i) => i.matchStatus === 'matched' || i.matchStatus === 'new_product',
+  ).length;
   const matchPct = totalItemCount > 0 ? Math.round((matchedCount / totalItemCount) * 100) : 100;
 
   checks.push({

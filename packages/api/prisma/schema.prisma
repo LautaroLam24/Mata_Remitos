@@ -173,6 +173,7 @@ model DocumentItem {
   matchScore     Int? // score 0-100 del fuzzy match contra catálogo
   // matchStatus: pending | matched | new_product | rejected
   matchStatus    String    @default("pending")
+  humanEdited    Boolean   @default(false) // true cuando el humano editó algún campo
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?

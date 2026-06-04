@@ -127,6 +127,17 @@ export default function ProductosPage() {
           Solo stock bajo
         </Button>
       </div>
+      {lowStock && (
+        <p className="text-xs text-muted-foreground">
+          Productos sin stock mínimo definido no se muestran en esta vista.{' '}
+          <button
+            className="underline underline-offset-2 hover:text-foreground"
+            onClick={() => setLowStock(false)}
+          >
+            Ver todos
+          </button>
+        </p>
+      )}
 
       <DataTable
         columns={columns}

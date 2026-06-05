@@ -4,13 +4,14 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ColumnDef } from '@tanstack/react-table';
-import { api, DocumentListItem, DocumentListParams } from '@/lib/api';
+import { api, type DocumentListItem, type DocumentListParams } from '@/lib/api';
 import { DataTable } from '@/components/ui/data-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Inbox, Search } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Inbox, RefreshCw, Search } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
 import { ExportButton } from '@/components/features/ExportButton';
 
@@ -59,6 +60,43 @@ const columns: ColumnDef<DocumentListItem>[] = [
   },
 ];
 
+function RemitoCard({ doc, onClick }: { doc: DocumentListItem; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left rounded-lg border bg-card p-4 space-y-2 hover:bg-muted/50 active:bg-muted transition-colors"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-medium text-sm leading-tight truncate">{doc.supplierName}</span>
+        <StatusBadge status={doc.status} />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Nro {doc.documentNumber} · {new Date(doc.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+      </p>
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>{doc.itemCount} {doc.itemCount === 1 ? 'ítem' : 'ítems'}</span>
+        <span>{doc.overallConfidence}% confianza</span>
+      </div>
+    </button>
+  );
+}
+
+function RemitoCardSkeleton() {
+  return (
+    <div className="rounded-lg border bg-card p-4 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <Skeleton className="h-4 w-2/5" />
+        <Skeleton className="h-5 w-20 rounded-full" />
+      </div>
+      <Skeleton className="h-3 w-3/5" />
+      <div className="flex items-center justify-between">
+        <Skeleton className="h-3 w-16" />
+        <Skeleton className="h-3 w-20" />
+      </div>
+    </div>
+  );
+}
+
 function RemitosPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -72,7 +110,7 @@ function RemitosPageInner() {
   const [dateTo, setDateTo] = useState('');
   const debouncedSearch = useDebounce(search, 300);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['remitos', { page, search: debouncedSearch, status, dateFrom, dateTo }],
     queryFn: () =>
       api.remitos.list({
@@ -83,6 +121,49 @@ function RemitosPageInner() {
         ...(dateTo ? { dateTo } : {}),
       }),
   });
+
+  const hasFilters = !!(debouncedSearch || status !== 'all' || dateFrom || dateTo);
+
+  function clearFilters() {
+    setSearch('');
+    setStatus('all');
+    setDateFrom('');
+    setDateTo('');
+    setPage(1);
+  }
+
+  const errorContent = (
+    <div className="flex flex-col items-center gap-3 py-8 text-center">
+      <RefreshCw className="h-10 w-10 text-muted-foreground/50" />
+      <p className="text-sm font-medium">No se pudo cargar</p>
+      <p className="text-xs text-muted-foreground">
+        La API está despertando. Puede tardar hasta un minuto.
+      </p>
+      <Button variant="outline" size="sm" onClick={() => { void refetch(); }}>
+        Reintentar
+      </Button>
+    </div>
+  );
+
+  const emptyContent = hasFilters ? (
+    <div className="flex flex-col items-center gap-3 py-8 text-center">
+      <Search className="h-10 w-10 text-muted-foreground/50" />
+      <p className="text-sm font-medium">Sin resultados</p>
+      <p className="text-xs text-muted-foreground">No encontramos remitos con esos filtros.</p>
+      <Button variant="outline" size="sm" onClick={clearFilters}>
+        Limpiar filtros
+      </Button>
+    </div>
+  ) : (
+    <div className="flex flex-col items-center gap-3 py-8 text-center">
+      <Inbox className="h-10 w-10 text-muted-foreground/50" />
+      <p className="text-sm font-medium">Tu bandeja está vacía</p>
+      <p className="text-xs text-muted-foreground">Empezá subiendo tu primer remito.</p>
+      <Button size="sm" onClick={() => router.push('/remitos/nuevo')}>
+        Subir remito
+      </Button>
+    </div>
+  );
 
   return (
     <div className="space-y-6 p-6">
@@ -135,54 +216,53 @@ function RemitosPageInner() {
           onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
           className="w-40"
         />
-        {(search || status !== 'all' || dateFrom || dateTo) && (
-          <Button
-            variant="outline"
-            onClick={() => { setSearch(''); setStatus('all'); setDateFrom(''); setDateTo(''); setPage(1); }}
-          >
+        {hasFilters && (
+          <Button variant="outline" onClick={clearFilters}>
             Limpiar filtros
           </Button>
         )}
       </div>
 
-      <DataTable
-        columns={columns}
-        data={data?.items ?? []}
-        isLoading={isLoading}
-        onRowClick={(doc) => router.push(`/remitos/${doc.id}`)}
-        emptyContent={
-          debouncedSearch || status !== 'all' || dateFrom || dateTo ? (
-            <div className="flex flex-col items-center gap-3 py-8 text-center">
-              <Search className="h-10 w-10 text-muted-foreground/50" />
-              <p className="text-sm font-medium">Sin resultados</p>
-              <p className="text-xs text-muted-foreground">No encontramos remitos con esos filtros.</p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => { setSearch(''); setStatus('all'); setDateFrom(''); setDateTo(''); setPage(1); }}
-              >
-                Limpiar filtros
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-3 py-8 text-center">
-              <Inbox className="h-10 w-10 text-muted-foreground/50" />
-              <p className="text-sm font-medium">Tu bandeja está vacía</p>
-              <p className="text-xs text-muted-foreground">Empezá subiendo tu primer remito.</p>
-              <Button size="sm" onClick={() => router.push('/remitos/nuevo')}>
-                Subir remito
-              </Button>
-            </div>
-          )
-        }
-      />
+      {/* Mobile: cards apiladas (se ocultan en md+) */}
+      <div className="md:hidden space-y-3">
+        {isLoading ? (
+          Array.from({ length: 5 }).map((_, i) => <RemitoCardSkeleton key={i} />)
+        ) : isError ? (
+          errorContent
+        ) : data?.items.length ? (
+          data.items.map((doc) => (
+            <RemitoCard
+              key={doc.id}
+              doc={doc}
+              onClick={() => router.push(`/remitos/${doc.id}`)}
+            />
+          ))
+        ) : (
+          emptyContent
+        )}
+      </div>
+
+      {/* Desktop: tabla (se oculta en mobile) */}
+      <div className="hidden md:block">
+        <DataTable
+          columns={columns}
+          data={isError ? [] : (data?.items ?? [])}
+          isLoading={isLoading}
+          onRowClick={(doc) => router.push(`/remitos/${doc.id}`)}
+          emptyContent={isError ? errorContent : emptyContent}
+        />
+      </div>
 
       {data && data.totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>{data.total} remitos — página {page} de {data.totalPages}</span>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page === 1}>Anterior</Button>
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page === data.totalPages}>Siguiente</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page === 1}>
+              Anterior
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page === data.totalPages}>
+              Siguiente
+            </Button>
           </div>
         </div>
       )}

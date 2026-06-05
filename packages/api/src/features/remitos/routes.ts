@@ -31,6 +31,8 @@ import {
   createAllUnmatchedResponseSchema,
 } from './schemas.js';
 import { ValidationError } from '../../shared/errors.js';
+import { downloadFile } from '../../infrastructure/storage.js';
+import { config } from '../../shared/config.js';
 import { exportToExcel, exportToCsv } from './export-service.js';
 import { runValidations } from './validation-service.js';
 import { validationsResponseSchema } from './schemas.js';
@@ -403,6 +405,46 @@ export const remitoRoutes: FastifyPluginAsync = async (app) => {
         quantity: Number(updated.quantity),
         unitPrice: updated.unitPrice !== null ? Number(updated.unitPrice) : null,
       });
+    },
+  );
+
+  // ─── Image proxy ─────────────────────────────────────────────────────────────
+
+  r.get(
+    '/:id/image',
+    {
+      schema: { params: z.object({ id: z.string() }) },
+      preHandler: [app.authenticate, app.requireTenant],
+    },
+    async (req, reply) => {
+      const { id } = req.params;
+
+      const doc = await db.document.findFirst({
+        where: { id, tenantId: req.tenant.id, deletedAt: null },
+        select: { imageUrl: true },
+      });
+
+      if (!doc) return reply.code(404).send({ message: 'Documento no encontrado' });
+
+      // imageUrl was stored as STORAGE_PUBLIC_URL/key — strip the prefix to get the key
+      const prefix = `${config.STORAGE_PUBLIC_URL}/`;
+      const imageKey = doc.imageUrl.startsWith(prefix)
+        ? doc.imageUrl.slice(prefix.length)
+        : doc.imageUrl;
+
+      const buffer = await downloadFile(imageKey);
+
+      const ext = imageKey.split('.').pop()?.toLowerCase() ?? '';
+      const contentType =
+        ext === 'pdf' ? 'application/pdf' :
+        ext === 'png' ? 'image/png' :
+        ext === 'webp' ? 'image/webp' :
+        'image/jpeg';
+
+      return reply
+        .type(contentType)
+        .header('Cache-Control', 'private, max-age=3600')
+        .send(buffer);
     },
   );
 

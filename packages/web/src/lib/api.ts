@@ -524,6 +524,8 @@ export const api = {
     getDocument: (id: string) =>
       request<DocumentDetail>(`/api/remitos/${id}`),
 
+    getImageBlob: (id: string) => requestBlob(`/api/remitos/${id}/image`),
+
     getValidations: (id: string) =>
       request<DocumentValidationsResponse>(`/api/remitos/${id}/validations`),
 

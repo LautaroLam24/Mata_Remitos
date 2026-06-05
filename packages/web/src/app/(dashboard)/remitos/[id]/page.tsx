@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -469,6 +469,36 @@ export default function RemitorDetailPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
 
+  // Imagen original cargada como blob URL (requiere auth, evita bucket público)
+  const [imageBlobUrl, setImageBlobUrl] = useState<string | null>(null);
+  const [imageLoadError, setImageLoadError] = useState(false);
+  const blobUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setImageBlobUrl(null);
+    setImageLoadError(false);
+
+    api.remitos.getImageBlob(id)
+      .then((blob) => {
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        blobUrlRef.current = url;
+        setImageBlobUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setImageLoadError(true);
+      });
+
+    return () => {
+      cancelled = true;
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+    };
+  }, [id]);
+
   // Estado para el diálogo de "Asociar a producto existente"
   const [associateItemId, setAssociateItemId] = useState<string | null>(null);
   const [productSearchTerm, setProductSearchTerm] = useState('');
@@ -695,19 +725,30 @@ export default function RemitorDetailPage() {
                 <CardTitle className="text-sm text-muted-foreground">Documento original</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={doc.imageUrl}
-                  alt="Documento original"
-                  className="w-full object-contain"
-                  style={{ maxHeight: '75vh' }}
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = 'none';
-                    target.parentElement!.innerHTML =
-                      '<div class="flex items-center justify-center h-48 text-muted-foreground text-sm p-6">No se pudo cargar la imagen</div>';
-                  }}
-                />
+                {imageLoadError ? (
+                  <div className="flex items-center justify-center h-48 text-muted-foreground text-sm p-6">
+                    No se pudo cargar el documento
+                  </div>
+                ) : !imageBlobUrl ? (
+                  <div className="flex items-center justify-center h-48 gap-2 text-muted-foreground text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Cargando documento...
+                  </div>
+                ) : doc.imageUrl.toLowerCase().endsWith('.pdf') ? (
+                  <iframe
+                    src={imageBlobUrl}
+                    title="Documento original"
+                    className="w-full border-0"
+                    style={{ height: '75vh' }}
+                  />
+                ) : (
+                  <img
+                    src={imageBlobUrl}
+                    alt="Documento original"
+                    className="w-full object-contain"
+                    style={{ maxHeight: '75vh' }}
+                  />
+                )}
               </CardContent>
             </Card>
           </div>

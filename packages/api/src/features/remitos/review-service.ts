@@ -179,8 +179,8 @@ export async function approveDocument(params: {
       // Solo procesar ítems con productId asignado (matched o new_product)
       if (!item.productId || (item.matchStatus !== 'matched' && item.matchStatus !== 'new_product')) continue;
 
-      const product = await tx.product.findUnique({
-        where: { id: item.productId },
+      const product = await tx.product.findFirst({
+        where: { id: item.productId, tenantId },
         select: { id: true, stockOnHand: true },
       });
 
@@ -203,8 +203,8 @@ export async function approveDocument(params: {
         },
       });
 
-      await tx.product.update({
-        where: { id: item.productId },
+      await tx.product.updateMany({
+        where: { id: item.productId, tenantId },
         data: { stockOnHand: balanceAfter },
       });
 
@@ -230,7 +230,7 @@ export async function approveDocument(params: {
         },
       },
     });
-  });
+  }, { timeout: 30000, maxWait: 15000 });
 
   // Notify uploader
   const uploaderEmail = await getUserEmail(doc.uploadedById);
@@ -620,8 +620,8 @@ export async function rejectDocument(params: {
   });
 
   // Notify uploader
-  const fullDoc = await db.document.findUnique({
-    where: { id },
+  const fullDoc = await db.document.findFirst({
+    where: { id, tenantId },
     select: { documentNumber: true, uploadedById: true, supplierId: true, supplierCuit: true },
   });
 

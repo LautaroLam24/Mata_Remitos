@@ -154,6 +154,10 @@ export const remitoRoutes: FastifyPluginAsync = async (app) => {
         return reply.send({ status: 'unknown' });
       }
 
+      if (job.data.tenantId !== req.tenant.id) {
+        return reply.send({ status: 'unknown' });
+      }
+
       const jobState = await job.getState();
 
       if (jobState === 'completed') {

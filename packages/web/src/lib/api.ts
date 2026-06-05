@@ -126,6 +126,7 @@ async function uploadFile<T>(path: string, file: File): Promise<T> {
 
 export interface UploadResponse {
   jobId: string;
+  documentId?: string;
   imageKey: string;
   message: string;
 }

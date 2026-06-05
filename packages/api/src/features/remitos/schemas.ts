@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const uploadResponseSchema = z.object({
   jobId: z.string(),
+  documentId: z.string().optional(),
   imageKey: z.string(),
   message: z.string(),
 });

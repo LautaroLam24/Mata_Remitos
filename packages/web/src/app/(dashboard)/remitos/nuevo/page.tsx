@@ -140,8 +140,13 @@ export default function NuevoRemitoPage() {
       clearInterval(timer);
       setUploadProgress(100);
       setTimeout(() => {
-        setJobId(result.jobId);
-        setPageState("processing");
+        if (result.documentId) {
+          // OCR_SYNC=true: documento ya procesado, salteamos el polling
+          setDocumentId(result.documentId);
+        } else {
+          setJobId(result.jobId);
+          setPageState("processing");
+        }
       }, 300);
     } catch (err) {
       clearInterval(timer);

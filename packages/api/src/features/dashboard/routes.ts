@@ -38,16 +38,16 @@ function variationPct(current: number, previous: number): number {
 }
 
 function toYYYYMM(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
 function generateMonths(start: Date, end: Date): string[] {
   const months: string[] = [];
-  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
-  const last = new Date(end.getFullYear(), end.getMonth(), 1);
+  const cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+  const last = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
   while (cur <= last) {
     months.push(toYYYYMM(cur));
-    cur.setMonth(cur.getMonth() + 1);
+    cur.setUTCMonth(cur.getUTCMonth() + 1);
   }
   return months;
 }

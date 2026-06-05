@@ -518,6 +518,7 @@ export default function RemitorDetailPage() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['document', id] });
       void qc.invalidateQueries({ queryKey: ['validations', id] });
+      void qc.invalidateQueries({ queryKey: ['remitos'] });
       router.push('/remitos?aprobado=1');
     },
   });
@@ -527,6 +528,7 @@ export default function RemitorDetailPage() {
     onSuccess: () => {
       setOverrideOpen(false);
       void qc.invalidateQueries({ queryKey: ['document', id] });
+      void qc.invalidateQueries({ queryKey: ['remitos'] });
       router.push('/remitos?aprobado=1');
     },
   });
@@ -536,6 +538,7 @@ export default function RemitorDetailPage() {
     onSuccess: () => {
       setRejectOpen(false);
       void qc.invalidateQueries({ queryKey: ['document', id] });
+      void qc.invalidateQueries({ queryKey: ['remitos'] });
       router.push('/remitos');
     },
   });

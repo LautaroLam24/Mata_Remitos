@@ -67,8 +67,10 @@ El operario saca una foto del remito con el celular. La IA extrae todos los dato
 | Buscador global Cmd+K | ✅ |
 | Atajos de teclado en revisión | ✅ |
 | Skeleton loaders + empty states | ✅ |
+| Vista mobile con cards en lista de remitos | ✅ |
+| Modo OCR síncrono sin Redis (OCR_SYNC=true) | ✅ |
+| Deploy en Render + Supabase | ✅ |
 | WhatsApp Business API | 🔜 |
-| Deploy a producción | 🔜 |
 
 ---
 
@@ -307,10 +309,15 @@ GET  /api/remitos/review-queue        Cola de documentos pendientes de revisión
 GET  /api/remitos                     Listar (filtros: status, supplierId, dateFrom, dateTo, search)
 GET  /api/remitos/:id                 Detalle con ítems y extracción raw
 GET  /api/remitos/:id/validations     Validaciones automáticas (CUIT, duplicados, confianza)
-POST /api/remitos/:id/approve         Aprobar → actualiza stock + notificación
-POST /api/remitos/:id/reject          Rechazar (con motivo opcional)
-GET  /api/remitos/export/excel        Exportar filtrado a .xlsx
-GET  /api/remitos/export/csv          Exportar filtrado a .csv
+POST  /api/remitos/:id/approve                        Aprobar → actualiza stock + notificación
+POST  /api/remitos/:id/reject                         Rechazar (con motivo opcional)
+PATCH /api/remitos/:id/items/:itemId                  Editar ítem (desc, cantidad, precio)
+POST  /api/remitos/:id/items/:itemId/create-product   Crear producto nuevo desde el ítem
+POST  /api/remitos/:id/items/:itemId/associate-product Asociar ítem a producto existente (guarda alias)
+POST  /api/remitos/:id/items/create-all-unmatched     Crear productos en bulk para todos los ítems sin asignar
+GET   /api/remitos/:id/image                          Proxy autenticado para servir el archivo original
+GET   /api/remitos/export/excel                       Exportar filtrado a .xlsx
+GET   /api/remitos/export/csv                         Exportar filtrado a .csv
 ```
 
 ### Productos
@@ -383,12 +390,14 @@ La capa de notificaciones está diseñada para soportar WhatsApp Business API co
 
 | Variable | Requerida | Descripción |
 |---|---|---|
-| `DATABASE_URL` | ✅ | PostgreSQL connection string |
-| `REDIS_URL` | ✅ | Redis connection string |
+| `DATABASE_URL` | ✅ | PostgreSQL connection string (session pooler — soporta transacciones) |
+| `DIRECT_URL` | Prod | Conexión directa a PostgreSQL para migraciones Prisma (Supabase: puerto 5432 directo) |
+| `REDIS_URL` | ✅ salvo OCR_SYNC | Redis connection string. Omitir si `OCR_SYNC=true` |
 | `JWT_SECRET` | ✅ | Secreto JWT (mín. 32 chars) |
 | `GEMINI_API_KEY` | Para OCR real | API key de [Google AI Studio](https://aistudio.google.com) |
 | `ANTHROPIC_API_KEY` | Opcional | Fallback Claude si Gemini falla |
 | `OCR_MOCK` | Dev | `true` para omitir llamadas a IA |
+| `OCR_SYNC` | Demo / prod sin Redis | `true` para procesar el OCR en el mismo request (sin BullMQ). El upload bloquea hasta que Gemini termina y devuelve `documentId` directo |
 | `STORAGE_ENDPOINT` | ✅ | Endpoint S3-compatible (MinIO o R2) |
 | `STORAGE_BUCKET` | ✅ | Nombre del bucket |
 | `STORAGE_ACCESS_KEY` | ✅ | Access key S3 |

@@ -301,11 +301,13 @@ function ItemRow({ item, docId, isPending, onItemUpdated, onOpenAssociate }: Ite
 
   return (
     <div className="space-y-2">
-      {/* Fila principal */}
-      <div className="flex items-start gap-2">
+      {/* Fila principal: columna en mobile, fila en desktop */}
+      <div className="flex flex-col sm:flex-row sm:items-end gap-2">
+
         {/* Descripción */}
-        <div className="flex-1 min-w-0">
+        <div className="sm:flex-1 min-w-0">
           <div className="flex items-center gap-1 mb-0.5">
+            <span className="text-[10px] text-muted-foreground leading-none">Descripción</span>
             {item.confidenceScore !== null && (
               <ConfidenceBadge confidence={item.confidenceScore} edited={item.humanEdited} />
             )}
@@ -321,40 +323,45 @@ function ItemRow({ item, docId, isPending, onItemUpdated, onOpenAssociate }: Ite
           />
         </div>
 
-        {/* Cantidad */}
-        <div className="w-20">
-          <div className="mb-0.5 text-[10px] text-muted-foreground">Cant.</div>
-          <Input
-            value={edits.quantity}
-            onChange={(e) => setEdits((p) => ({ ...p, quantity: e.target.value }))}
-            onBlur={() => handleBlur('quantity')}
-            disabled={!isPending}
-            className="h-7 text-xs text-right"
-            type="number"
-            min="0"
-            step="any"
-          />
-        </div>
+        {/* Cant + Precio + Badge: fila propia en mobile, columnas inline en desktop */}
+        <div className="flex items-end gap-2">
 
-        {/* Precio */}
-        <div className="w-24">
-          <div className="mb-0.5 text-[10px] text-muted-foreground">Precio u.</div>
-          <Input
-            value={edits.unitPrice}
-            onChange={(e) => setEdits((p) => ({ ...p, unitPrice: e.target.value }))}
-            onBlur={() => handleBlur('unitPrice')}
-            disabled={!isPending}
-            className="h-7 text-xs text-right"
-            type="number"
-            min="0"
-            step="any"
-            placeholder="—"
-          />
-        </div>
+          {/* Cantidad */}
+          <div className="w-20">
+            <div className="mb-0.5 text-[10px] text-muted-foreground">Cant.</div>
+            <Input
+              value={edits.quantity}
+              onChange={(e) => setEdits((p) => ({ ...p, quantity: e.target.value }))}
+              onBlur={() => handleBlur('quantity')}
+              disabled={!isPending}
+              className="h-7 text-xs text-right"
+              type="number"
+              min="0"
+              step="any"
+            />
+          </div>
 
-        {/* Badge */}
-        <div className="pt-5 shrink-0">
-          <MatchBadge status={item.matchStatus} />
+          {/* Precio */}
+          <div className="flex-1 sm:flex-none sm:w-24">
+            <div className="mb-0.5 text-[10px] text-muted-foreground">Precio u.</div>
+            <Input
+              value={edits.unitPrice}
+              onChange={(e) => setEdits((p) => ({ ...p, unitPrice: e.target.value }))}
+              onBlur={() => handleBlur('unitPrice')}
+              disabled={!isPending}
+              className="h-7 text-xs text-right"
+              type="number"
+              min="0"
+              step="any"
+              placeholder="—"
+            />
+          </div>
+
+          {/* Badge */}
+          <div className="shrink-0">
+            <MatchBadge status={item.matchStatus} />
+          </div>
+
         </div>
       </div>
 
